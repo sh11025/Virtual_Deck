@@ -20,6 +20,10 @@ set /p MSG=이번에 바꾼 내용을 짧게 적어 주세요 (그냥 Enter = �
 if "%MSG%"=="" set MSG=작업 저장 %date% %time:~0,5%
 git commit -m "%MSG%"
 echo.
+echo 깃허브에 올리는 중...
+git push
+echo.
 echo 최근 기록:
 git log --oneline -5
 pause
+
