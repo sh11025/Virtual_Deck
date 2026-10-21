@@ -94,14 +94,12 @@ class AppConfig:
 
         # 유리 슬라이더 변환: glass_clarity 하나로 합침
         if "glass_clarity" in raw:
-            cfg.glass_clarity = max(0, min(100, int(raw["glass_clarity"])))
+            clarity_val = int(raw["glass_clarity"])
+        elif "glass_frost" in raw:
+            clarity_val = int(raw["glass_frost"])
         else:
-            # 예전 두 값에서 자동 변환
-            frost_val = int(raw.get("glass_frost", 20))
-            cfg.glass_clarity = max(0, min(100, int(frost_val / 0.75)))
-        # clarity 값에서 blur와 frost 동기화 (blur = 8 + v*0.3, frost = v*0.75)
-        cfg.glass_blur = int(round(8 + cfg.glass_clarity * 0.3))
-        cfg.glass_frost = int(round(cfg.glass_clarity * 0.75))
+            clarity_val = 20
+        cfg.set_clarity(clarity_val)
 
         # 예전 버전 값 정리
         if int(raw.get("layout_version", 1)) < 3:
@@ -131,6 +129,13 @@ class AppConfig:
                   "bg_color", "bg_gradient_start", "bg_gradient_end", "bg_gradient_dir",
                   "bg_image_path", "bg_image_zoom", "bg_image_x", "bg_image_y")
 
+    def set_clarity(self, val: int) -> None:
+        """유리 맑기(0=가장 맑음 ~ 100=가장 뿌얌)를 설정하고 blur 및 frost를 연동 계산합니다."""
+        v = max(0, min(100, int(val)))
+        self.glass_clarity = v
+        self.glass_blur = int(round(10 + v * 0.32))
+        self.glass_frost = v
+
     def theme_dict(self) -> Dict[str, Any]:
         return {k: getattr(self, k) for k in self.THEME_KEYS}
 
@@ -138,6 +143,8 @@ class AppConfig:
         for k in self.THEME_KEYS:
             if k in data:
                 setattr(self, k, data[k])
+        if "glass_clarity" in data:
+            self.set_clarity(data["glass_clarity"])
 
     def size_preset(self) -> str:
         for key, (size, _) in SIZE_PRESETS.items():

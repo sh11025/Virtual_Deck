@@ -50,14 +50,15 @@ class _ThemeDict(dict):
 
 # 기본으로 들어 있는 덱 스타일 7개 (모양 관련 설정 묶음)
 BUILTIN_THEMES = _ThemeDict({
-    "맑음": {"theme": "light", "bg_type": "glass", "glass_blur": 16, "glass_frost": 20, "glass_clarity": 20, "glass_tint": "", "icon_style": "line"},
-    "밤": {"theme": "dark", "bg_type": "glass", "glass_blur": 18, "glass_frost": 30, "glass_clarity": 30, "glass_tint": "", "icon_style": "line"},
-    "젖빛": {"theme": "light", "bg_type": "glass", "glass_blur": 35, "glass_frost": 75, "glass_clarity": 75, "glass_tint": "", "icon_style": "duotone"},
-    "하늘": {"theme": "light", "bg_type": "glass", "glass_blur": 18, "glass_frost": 25, "glass_clarity": 25, "glass_tint": "sky", "icon_style": "line"},
-    "노을": {"theme": "light", "bg_type": "glass", "glass_blur": 18, "glass_frost": 25, "glass_clarity": 25, "glass_tint": "sunset", "icon_style": "line"},
-    "숲": {"theme": "light", "bg_type": "glass", "glass_blur": 18, "glass_frost": 25, "glass_clarity": 25, "glass_tint": "forest", "icon_style": "line"},
+    "맑음": {"theme": "light", "bg_type": "glass", "glass_clarity": 20, "glass_tint": "", "icon_style": "line"},
+    "밤": {"theme": "dark", "bg_type": "glass", "glass_clarity": 30, "glass_tint": "", "icon_style": "line"},
+    "젖빛": {"theme": "light", "bg_type": "glass", "glass_clarity": 80, "glass_tint": "", "icon_style": "duotone"},
+    "하늘": {"theme": "light", "bg_type": "glass", "glass_clarity": 25, "glass_tint": "sky", "icon_style": "line"},
+    "노을": {"theme": "light", "bg_type": "glass", "glass_clarity": 25, "glass_tint": "sunset", "icon_style": "line"},
+    "숲": {"theme": "light", "bg_type": "glass", "glass_clarity": 25, "glass_tint": "forest", "icon_style": "line"},
     "투명 (버튼만)": {"theme": "light", "bg_type": "clear", "glass_clarity": 30, "glass_tint": "", "icon_style": "line"},
 })
+
 
 
 def get_builtin_theme(name: str) -> Optional[Dict[str, Any]]:

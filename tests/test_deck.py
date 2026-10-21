@@ -324,8 +324,19 @@ finally:
 section("기타")
 check(paths.resolve_icon(r"C:\옛날폴더\Virtual Deck\data\icons\없는파일.png") is None, "없는 아이콘은 None")
 avail = app.primaryScreen().availableGeometry()
-pnt = w._snapped(QPoint(avail.left() - w.panel.x() + 10, 300))
-check(pnt.x() + w.panel.x() == avail.left() + 6, "화면 가장자리에 붙기")
+# B-4: 위쪽 끝 스냅 검사 (header_bar 윗변이 화면 위쪽 + 6)
+snap_top = w._snapped(QPoint(300, avail.top() - w.header_bar.y() + 10))
+header_top = snap_top.y() + w.header_bar.y()
+check(header_top == avail.top() + 6, f"위쪽 끝 스냅 시 header_bar 윗변이 화면 위쪽 + 6 ({header_top} == {avail.top() + 6})")
+
+# B-4: 메뉴 숨김/표시 시 창 위치 유지 검사
+initial_pos = w.pos()
+w._hide_header_fade()
+w._on_header_anim_finished()
+pos_hidden = w.pos()
+w.enterEvent(None)
+pos_shown = w.pos()
+check(initial_pos == pos_hidden == pos_shown, f"메뉴를 숨겼다 보였다 해도 self.pos() 그대로 ({initial_pos})")
 
 # ====================================================================
 section("위쪽 메뉴 및 여백")
@@ -350,6 +361,13 @@ w._adjust_size()
 pad = max(6, round(64 * 0.09))
 expected_panel_w = 3 * 64 + 2 * 4 + 2 * pad
 check(w.panel.width() == expected_panel_w, f"SS 3x3 버튼판 너비 ({w.panel.width()} == {expected_panel_w})")
+
+# B-4: SS 3x3 에서 왼쪽 끝 스냅 시 header_bar 왼쪽 변이 화면 안
+combo = w.panel.geometry().united(w.header_bar.geometry())
+snap_left = w._snapped(QPoint(avail.left() - combo.left() + 10, 300))
+check(snap_left.x() + combo.left() == avail.left() + 6, f"SS 3x3 왼쪽 끝 스냅 시 합친 사각형 스냅 ({snap_left.x() + combo.left()})")
+check(snap_left.x() + w.header_bar.x() >= avail.left() + 6, f"SS 3x3 왼쪽 끝 스냅 시 header_bar 왼쪽 변이 화면 안 ({snap_left.x() + w.header_bar.x()})")
+
 
 # ====================================================================
 section("모달 없는 대화상자 (환경설정·버튼 설정)")
@@ -409,7 +427,91 @@ check(bool(sky_style.get("glass_tint")), "하늘 스타일 적용 시 glass_tint
 w._open_settings()
 sd = w._settings_dlg
 check(sd is not None and len(sd.tabs.labels) == 4, f"환경설정 탭이 4개 ({sd.tabs.labels if sd else []})")
+
+# A-3. 스타일 카드 선택 및 glass_clarity 연동 테스트
+sd._apply_style("맑음", BUILTIN_THEMES["맑음"])
+selected_cards = [name for name, card in sd.style_cards.items() if card.isChecked()]
+check(selected_cards == ["맑음"], f"맑음 적용 시 '맑음' 하나만 선택됨 ({selected_cards})")
+
+sd._apply_style("젖빛", BUILTIN_THEMES["젖빛"])
+selected_cards = [name for name, card in sd.style_cards.items() if card.isChecked()]
+check(selected_cards == ["젖빛"], f"젖빛 적용 시 '젖빛' 하나만 선택됨 ({selected_cards})")
+
+blur_before = sd.config.glass_blur
+frost_before = sd.config.glass_frost
+reloaded = AppConfig.from_dict(sd.config.to_dict())
+check(reloaded.glass_blur == blur_before and reloaded.glass_frost == frost_before,
+      f"젖빛 적용 후 to_dict->from_dict 동기화 유지 (blur={reloaded.glass_blur}, frost={reloaded.glass_frost})")
+
+sd._on_clarity_changed(50)
+selected_cards = [name for name, card in sd.style_cards.items() if card.isChecked()]
+check(len(selected_cards) == 0, f"슬라이더 50일 때 선택된 카드 없음 ({selected_cards})")
+
 sd.reject()
+
+# ====================================================================
+section("C: 휠 오작동 방지 (no_wheel)")
+from ui.widgets import no_wheel
+from PySide6.QtWidgets import QComboBox
+from PySide6.QtGui import QWheelEvent
+test_cb = no_wheel(QComboBox())
+test_cb.addItems(["첫번째", "두번째", "세번째"])
+test_cb.setCurrentIndex(0)
+test_cb.clearFocus()
+# 휠을 아래로 굴리는 이벤트 생성
+we = QWheelEvent(QPointF(10, 10), QPointF(10, 10), QPoint(0, 0), QPoint(0, -120), Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+app.sendEvent(test_cb, we)
+check(test_cb.currentIndex() == 0, f"포커스 없는 콤보에 휠 이벤트를 보내도 currentIndex 그대로 ({test_cb.currentIndex()})")
+
+# ====================================================================
+section("F: 켜기/끄기 실제 프로그램·폴더 상태 연동")
+from core import running_state
+from models.button_model import DeckButtonData
+
+w.config.sync_toggle_state = True
+w.show()
+p_btn = DeckButtonData(id="btn_0_0", row=0, col=0, name="테스트앱", action_type="program", action_data="notepad.exe", toggle=True, toggle_on=False)
+w.current_buttons()["btn_0_0"] = p_btn
+w._rebuild_grid()
+
+# 1. 실제 상태 True -> 다음 tick에 toggle_on True
+running_state.is_program_running = lambda cmd: True
+w._live_tick_count = 1
+w._on_live_tick()
+check(p_btn.toggle_on is True, f"실제 상태 True 시 toggle_on이 True로 동기화됨 ({p_btn.toggle_on})")
+
+# 2. 실제 상태 False -> 다음 tick에 toggle_on False
+running_state.is_program_running = lambda cmd: False
+w._live_tick_count = 1
+w._on_live_tick()
+check(p_btn.toggle_on is False, f"실제 상태 False 시 toggle_on이 False로 동기화됨 ({p_btn.toggle_on})")
+
+# 3. 실제 상태 None -> 그대로 유지
+p_btn.toggle_on = True
+running_state.is_program_running = lambda cmd: None
+w._live_tick_count = 1
+w._on_live_tick()
+check(p_btn.toggle_on is True, f"실제 상태 None 시 toggle_on 상태 유지 ({p_btn.toggle_on})")
+
+# 4. 켜진 상태에서 누름 + off 동작 비어 있음 -> close 호출
+close_called = []
+running_state.close_program_windows = lambda cmd: (close_called.append(cmd), 1)[1]
+p_btn.toggle_on = True
+p_btn.off_action_type = "none"
+p_btn.off_action_data = ""
+w._handle_click("btn_0_0")
+check(len(close_called) == 1 and close_called[0] == "notepad.exe", f"켜진 상태에서 누르면 close 호출됨 ({close_called})")
+check(p_btn.toggle_on is False, f"close 호출 후 toggle_on False로 변경됨 ({p_btn.toggle_on})")
+
+# 5. 단축키 버튼은 누를 때마다 뒤집힘
+sc_btn = DeckButtonData(id="btn_0_1", row=0, col=1, name="단축키", action_type="shortcut", action_data="Ctrl + S", toggle=True, toggle_on=False)
+w.current_buttons()["btn_0_1"] = sc_btn
+w._rebuild_grid()
+w._handle_click("btn_0_1")
+check(sc_btn.toggle_on is True, f"단축키 버튼 1회 클릭 시 True ({sc_btn.toggle_on})")
+w._handle_click("btn_0_1")
+check(sc_btn.toggle_on is False, f"단축키 버튼 2회 클릭 시 False ({sc_btn.toggle_on})")
+
 
 # ====================================================================
 section("일상 용어 검사 (덱 → 버튼판 등)")

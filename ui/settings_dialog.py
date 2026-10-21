@@ -22,6 +22,7 @@ from ui.theme import T
 from ui.glass import paint_glass, rounded_path, make_aurora, with_alpha
 from ui.widgets import (
     GlassDialog, GlassButton, GlassToggle, SegmentedTabs, KeyCaptureEdit, section_label, hint_label,
+    no_wheel,
 )
 
 
@@ -86,7 +87,7 @@ def slider_row(title: str, slider: QSlider, value_label: QLabel) -> QHBoxLayout:
 
 
 def make_slider(lo, hi, val) -> QSlider:
-    s = QSlider(Qt.Horizontal)
+    s = no_wheel(QSlider(Qt.Horizontal))
     s.setRange(lo, hi)
     s.setValue(val)
     return s
@@ -211,7 +212,7 @@ class SettingsDialog(GlassDialog):
     SPACING_MAP = [4, 8, 14]      # 좁게 / 보통 / 넓게
 
     def __init__(self, config: AppConfig, storage=None, parent=None, modeless: bool = True):
-        super().__init__("환경설정", "바꾸면 버튼판에 바로 보여요", parent=parent, width=720, modeless=modeless)
+        super().__init__("환경설정", "바꾸면 버튼판에 바로 보여요", parent=parent, width=820, modeless=modeless)
         self.config = config
         self.storage = storage or StorageService()
         self.restore_path = None
@@ -239,7 +240,10 @@ class SettingsDialog(GlassDialog):
 
         self._sync_controls()
         self._loading = False
-        self.resize(self.width(), 700)
+        avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
+        dialog_w = min(820, int(avail.width() * 0.90))
+        dialog_h = min(int(avail.height() * 0.85), 680)
+        self.resize(dialog_w, dialog_h)
 
     def _changed(self, *_):
         if self._loading:
@@ -251,53 +255,65 @@ class SettingsDialog(GlassDialog):
         page_widget, v = page()
         c = self.config
 
-        # 1. 스타일 카드 그리드
+        # 1. 스타일 카드 그리드 (한 줄 4개 x 2줄)
         v.addWidget(section_label("스타일"))
         self.cards_container = QWidget()
         self.cards_grid = QGridLayout(self.cards_container)
         self.cards_grid.setContentsMargins(0, 0, 0, 0)
-        self.cards_grid.setSpacing(10)
+        self.cards_grid.setSpacing(8)
         self._populate_style_cards()
         v.addWidget(self.cards_container)
 
-        # 2. 밝게 / 어둡게
-        v.addWidget(section_label("밝기 및 유리"))
+        # 아래 두 칸 (왼쪽: 밝게/어둡게, 유리 맑기, 전체 진하기 / 오른쪽: 아이콘 모양, 버튼 이름 보이기)
+        bot_cols = QHBoxLayout()
+        bot_cols.setSpacing(20)
+
+        # 왼쪽 칸
+        left_bot = QVBoxLayout()
+        left_bot.setSpacing(10)
+        left_bot.addWidget(section_label("밝기 및 유리"))
+
         tb_row = QHBoxLayout()
         self.theme_tabs = SegmentedTabs(["밝은 테마", "어두운 테마"])
         self.theme_tabs.setCurrentIndex(1 if c.theme == "dark" else 0, animate=False)
         self.theme_tabs.currentChanged.connect(self._on_theme_changed)
         tb_row.addWidget(QLabel("테마 밝기"))
         tb_row.addWidget(self.theme_tabs, 1)
-        v.addLayout(tb_row)
+        left_bot.addLayout(tb_row)
 
-        # 3. 유리: 맑게 ↔ 뿌옇게 슬라이더 하나 (glass_clarity)
         clarity_val = getattr(c, "glass_clarity", 20)
         self.clarity_slider = make_slider(0, 100, clarity_val)
         self.clarity_lab = QLabel(f"{clarity_val}")
         self.clarity_slider.valueChanged.connect(self._on_clarity_changed)
-        v.addLayout(slider_row("유리 맑기 / 흐림", self.clarity_slider, self.clarity_lab))
-        v.addWidget(hint_label("왼쪽으로 갈수록 투명하고 맑아지며, 오른쪽으로 갈수록 뿌옇게 흐려집니다."))
+        left_bot.addLayout(slider_row("유리 맑기 / 흐림", self.clarity_slider, self.clarity_lab))
 
-        # 4. 아이콘 모양
-        v.addWidget(section_label("아이콘 및 라벨"))
+        self.opacity = make_slider(30, 100, int(c.opacity * 100))
+        self.opacity_lab = QLabel(f"{int(c.opacity * 100)}%")
+        self.opacity.valueChanged.connect(self._on_opacity_changed)
+        left_bot.addLayout(slider_row("전체 진하기", self.opacity, self.opacity_lab))
+        left_bot.addStretch(1)
+        bot_cols.addLayout(left_bot, 1)
+
+        # 오른쪽 칸
+        right_bot = QVBoxLayout()
+        right_bot.setSpacing(10)
+        right_bot.addWidget(section_label("아이콘 및 이름"))
+
         self.icon_styles = ["line", "duotone", "emoji"]
         cur_icon_idx = self.icon_styles.index(c.icon_style) if c.icon_style in self.icon_styles else 0
         self.icon_tabs = SegmentedTabs(["선만", "색 채움", "이모지"])
         self.icon_tabs.setCurrentIndex(cur_icon_idx, animate=False)
         self.icon_tabs.currentChanged.connect(lambda i: self._set("icon_style", self.icon_styles[i]))
-        v.addWidget(self.icon_tabs)
+        right_bot.addWidget(self.icon_tabs)
 
-        # 5. 버튼 이름 보이기
         self.labels_toggle = GlassToggle(c.show_labels)
         self.labels_toggle.toggled.connect(lambda on: self._set("show_labels", on))
-        v.addLayout(toggle_row("버튼 이름 표시", "아이콘 아래에 버튼 이름을 함께 보여줍니다.", self.labels_toggle))
+        right_bot.addLayout(toggle_row("버튼 이름 표시", "아이콘 아래에 버튼 이름을 함께 보여줍니다.", self.labels_toggle))
+        right_bot.addStretch(1)
+        bot_cols.addLayout(right_bot, 1)
 
-        # 6. 전체 진하기
-        self.opacity = make_slider(30, 100, int(c.opacity * 100))
-        self.opacity_lab = QLabel(f"{int(c.opacity * 100)}%")
-        self.opacity.valueChanged.connect(self._on_opacity_changed)
-        v.addLayout(slider_row("전체 진하기", self.opacity, self.opacity_lab))
-
+        v.addLayout(bot_cols)
+        v.addStretch(1)
         self.stack.addWidget(page_widget)
 
     def _populate_style_cards(self):
@@ -333,9 +349,8 @@ class SettingsDialog(GlassDialog):
 
     def _on_clarity_changed(self, val: int):
         self.clarity_lab.setText(str(val))
-        self.config.glass_clarity = val
-        self.config.glass_frost = val
-        self.config.glass_blur = max(10, int(val * 0.45))
+        self.config.set_clarity(val)
+        self._sync_controls()
         self._changed()
 
     def _on_opacity_changed(self, val: int):
@@ -353,7 +368,7 @@ class SettingsDialog(GlassDialog):
         grid_lay.setSpacing(12)
 
         grid_lay.addWidget(QLabel("세로 줄 수"))
-        self.rows_spin = QSpinBox()
+        self.rows_spin = no_wheel(QSpinBox())
         self.rows_spin.setRange(1, 8)
         self.rows_spin.setValue(c.rows)
         self.rows_spin.valueChanged.connect(lambda val: self._set("rows", val))
@@ -362,7 +377,7 @@ class SettingsDialog(GlassDialog):
         grid_lay.addSpacing(20)
 
         grid_lay.addWidget(QLabel("가로 칸 수"))
-        self.cols_spin = QSpinBox()
+        self.cols_spin = no_wheel(QSpinBox())
         self.cols_spin.setRange(1, 8)
         self.cols_spin.setValue(c.cols)
         self.cols_spin.valueChanged.connect(lambda val: self._set("cols", val))
@@ -408,15 +423,20 @@ class SettingsDialog(GlassDialog):
         page_widget, v = page()
         c = self.config
 
-        # 1. 항상 위에 표시
+        cols = QHBoxLayout()
+        cols.setSpacing(20)
+
+        # 왼쪽: 항상 위, 숨기기 키, 자석, 흐려지기, 위쪽 메뉴 항상 보이기
+        left = QVBoxLayout()
+        left.setSpacing(10)
+
         self.top_toggle = GlassToggle(c.always_on_top)
         self.top_toggle.toggled.connect(lambda on: self._set("always_on_top", on))
-        v.addLayout(toggle_row("항상 위에 표시", "다른 프로그램을 쓰더라도 버튼판이 가려지지 않고 위에 머뭅니다.", self.top_toggle))
+        left.addLayout(toggle_row("항상 위에 표시", "다른 프로그램을 쓰더라도 버튼판이 가려지지 않고 위에 머뭅니다.", self.top_toggle))
 
-        # 2. 키보드로 숨기기·보이기 (+키 입력)
         self.hotkey_toggle = GlassToggle(c.hotkey_enabled)
         self.hotkey_toggle.toggled.connect(self._on_hotkey_toggle)
-        v.addLayout(toggle_row("단축키로 숨기기·보이기", "어디서나 이 키를 누르면 버튼판을 띄우거나 숨깁니다.", self.hotkey_toggle))
+        left.addLayout(toggle_row("단축키로 숨기기·보이기", "어디서나 이 키를 누르면 버튼판을 띄우거나 숨깁니다.", self.hotkey_toggle))
 
         hk_row = QHBoxLayout()
         hk_row.setSpacing(10)
@@ -425,22 +445,15 @@ class SettingsDialog(GlassDialog):
         self.hotkey_edit.captured.connect(self._on_hotkey_captured)
         self.hotkey_edit.setEnabled(c.hotkey_enabled)
         hk_row.addWidget(self.hotkey_edit, 1)
-        v.addLayout(hk_row)
+        left.addLayout(hk_row)
 
-        # 3. 컴퓨터 켤 때 실행
-        self.auto_start_toggle = GlassToggle(c.auto_start)
-        self.auto_start_toggle.toggled.connect(lambda on: self._set("auto_start", on))
-        v.addLayout(toggle_row("컴퓨터 켤 때 자동 실행", "윈도우가 시작되면 Virtual Deck이 자동으로 켜집니다.", self.auto_start_toggle))
-
-        # 4. 화면 끝에 자석처럼 붙기
         self.snap_toggle = GlassToggle(c.snap_edges)
         self.snap_toggle.toggled.connect(lambda on: self._set("snap_edges", on))
-        v.addLayout(toggle_row("화면 끝에 자석처럼 붙기", "버튼판을 끌고 화면 모서리에 가까이 가면 찰칵 달라붙습니다.", self.snap_toggle))
+        left.addLayout(toggle_row("화면 끝에 자석처럼 붙기", "버튼판을 끌고 화면 모서리에 가까이 가면 찰칵 달라붙습니다.", self.snap_toggle))
 
-        # 5. 안 쓸 때 흐려지기
         self.fade_toggle = GlassToggle(c.auto_fade)
         self.fade_toggle.toggled.connect(self._on_fade_toggle)
-        v.addLayout(toggle_row("안 쓸 때 흐려지기", "마우스를 떼고 있으면 투명해져서 화면을 가리지 않습니다.", self.fade_toggle))
+        left.addLayout(toggle_row("안 쓸 때 흐려지기", "마우스를 떼고 있으면 투명해져서 화면을 가리지 않습니다.", self.fade_toggle))
 
         self.fade_box = QWidget()
         fb = QVBoxLayout(self.fade_box)
@@ -455,28 +468,37 @@ class SettingsDialog(GlassDialog):
         self.fade_op.valueChanged.connect(self._on_fade)
         fb.addLayout(slider_row("흐려졌을 때 진하기", self.fade_op, self.fade_op_lab))
         self.fade_box.setVisible(c.auto_fade)
-        v.addWidget(self.fade_box)
+        left.addWidget(self.fade_box)
 
-        # 6. 위쪽 메뉴 항상 보이기
         self.always_header_toggle = GlassToggle(c.always_show_header)
         self.always_header_toggle.toggled.connect(lambda on: self._set("always_show_header", on))
-        v.addLayout(toggle_row("위쪽 메뉴 항상 보이기", "마우스를 올리지 않아도 상단 알약 메뉴를 항상 표시합니다.", self.always_header_toggle))
+        left.addLayout(toggle_row("위쪽 메뉴 항상 보이기", "마우스를 올리지 않아도 상단 알약 메뉴를 항상 표시합니다.", self.always_header_toggle))
+        left.addStretch(1)
+        cols.addLayout(left, 1)
 
-        # 7. 알림 보이기
+        # 오른쪽: 나머지
+        right = QVBoxLayout()
+        right.setSpacing(10)
+
+        self.auto_start_toggle = GlassToggle(c.auto_start)
+        self.auto_start_toggle.toggled.connect(lambda on: self._set("auto_start", on))
+        right.addLayout(toggle_row("컴퓨터 켤 때 자동 실행", "윈도우가 시작되면 Virtual Deck이 자동으로 켜집니다.", self.auto_start_toggle))
+
         self.toasts_toggle = GlassToggle(c.show_toast)
         self.toasts_toggle.toggled.connect(lambda on: self._set("show_toast", on))
-        v.addLayout(toggle_row("알림 보이기", "프로필 전환이나 되돌리기 시 화면 아래에 작은 알림을 띄웁니다.", self.toasts_toggle))
+        right.addLayout(toggle_row("알림 보이기", "프로필 전환이나 되돌리기 시 화면 아래에 작은 알림을 띄웁니다.", self.toasts_toggle))
 
-        # 8. 쓰는 프로그램에 맞춰 프로필 바꾸기
         self.auto_profile_toggle = GlassToggle(c.auto_switch_profile)
         self.auto_profile_toggle.toggled.connect(lambda on: self._set("auto_switch_profile", on))
-        v.addLayout(toggle_row("쓰는 프로그램에 맞춰 프로필 바꾸기", "포토샵, 브라우저 등 실행 중인 창에 맞춰 지정한 프로필로 자동 전환합니다.", self.auto_profile_toggle))
+        right.addLayout(toggle_row("쓰는 프로그램에 맞춰 프로필 바꾸기", "포토샵, 브라우저 등 실행 중인 창에 맞춰 지정한 프로필로 자동 전환합니다.", self.auto_profile_toggle))
 
-        # 9. 음소거 버튼을 실제 소리 상태와 맞추기
         self.sync_mute_toggle = GlassToggle(c.sync_toggle_state)
         self.sync_mute_toggle.toggled.connect(lambda on: self._set("sync_toggle_state", on))
-        v.addLayout(toggle_row("음소거 버튼을 실제 소리 상태와 맞추기", "윈도우 전체 음소거 상태를 감지하여 버튼의 켜짐/꺼짐을 일치시킵니다.", self.sync_mute_toggle))
+        right.addLayout(toggle_row("음소거·프로그램 버튼 불을 실제 상태와 맞추기", "윈도우 음소거 및 프로그램 실행 상태를 감지하여 버튼의 켜짐/꺼짐을 일치시킵니다.", self.sync_mute_toggle))
+        right.addStretch(1)
+        cols.addLayout(right, 1)
 
+        v.addLayout(cols)
         v.addStretch(1)
         self.stack.addWidget(page_widget)
 
@@ -485,18 +507,72 @@ class SettingsDialog(GlassDialog):
         page_widget, v = page()
         c = self.config
 
-        # 1. 직접 꾸민 배경
-        v.addWidget(section_label("직접 꾸민 배경"))
+        cols = QHBoxLayout()
+        cols.setSpacing(20)
+
+        # 왼쪽: 되돌리기·보관 기간, 길게 누르는 시간, 컴퓨터 부담 줄이기, 소리 기능 설치
+        left = QVBoxLayout()
+        left.setSpacing(10)
+
+        left.addWidget(section_label("자동 백업 및 되돌리기"))
+        bk_row = QHBoxLayout()
+        b_restore = GlassButton("백업 목록에서 되돌리기…", icon_name="undo")
+        b_restore.clicked.connect(self._open_backup_dialog)
+        bk_row.addWidget(b_restore)
+
+        bk_row.addSpacing(12)
+        bk_row.addWidget(QLabel("보관 기간"))
+        self.retention_combo = no_wheel(QComboBox())
+        self.retention_combo.addItem("7일", 7)
+        self.retention_combo.addItem("14일", 14)
+        self.retention_combo.addItem("30일", 30)
+        self.retention_combo.addItem("무제한", 0)
+        cur_days = getattr(c, "backup_retention_days", 14)
+        self.retention_combo.setCurrentIndex(max(0, self.retention_combo.findData(cur_days)))
+        self.retention_combo.currentIndexChanged.connect(lambda _: self._set("backup_retention_days", self.retention_combo.currentData()))
+        bk_row.addWidget(self.retention_combo)
+        bk_row.addStretch(1)
+        left.addLayout(bk_row)
+
+        left.addWidget(section_label("동작 세부 설정"))
+        self.hold_slider = make_slider(200, 1000, c.hold_ms)
+        self.hold_lab = QLabel(f"{c.hold_ms}ms")
+        self.hold_slider.valueChanged.connect(self._on_hold_changed)
+        left.addLayout(slider_row("길게 누르는 시간", self.hold_slider, self.hold_lab))
+
+        self.low_spec_toggle = GlassToggle(getattr(c, "low_spec_mode", False))
+        self.low_spec_toggle.toggled.connect(lambda on: self._set("low_spec_mode", on))
+        left.addLayout(toggle_row("컴퓨터 부담 줄이기", "흐림 효과와 화면 캡처 주기를 완화하여 사양이 낮은 PC에서도 부드럽게 작동합니다.", self.low_spec_toggle))
+
+        left.addWidget(section_label("소리 제어 확장"))
+        sound_row = QHBoxLayout()
+        from core.dependencies import has_pycaw
+        available = has_pycaw()
+        sound_status = QLabel("설치됨 (소리 감지 사용 가능)" if available else "미설치 (기본 음소거만 작동)")
+        sound_status.setStyleSheet("color: #4ade80;" if available else "color: #fbbf24;")
+        sound_row.addWidget(sound_status, 1)
+        if not available:
+            b_inst = GlassButton("소리 기능 설치")
+            b_inst.clicked.connect(self._install_pycaw)
+            sound_row.addWidget(b_inst)
+        left.addLayout(sound_row)
+        left.addStretch(1)
+        cols.addLayout(left, 1)
+
+        # 오른쪽: 직접 꾸민 배경, 내 스타일 저장·내보내기·불러오기, 이모지 아이콘 바꾸기
+        right = QVBoxLayout()
+        right.setSpacing(10)
+
+        right.addWidget(section_label("직접 꾸민 배경"))
         self.custom_bg_modes = ["glass", "color", "gradient", "image"]
         cur_bg = c.bg_type if c.bg_type in self.custom_bg_modes else "glass"
         cur_bg_idx = self.custom_bg_modes.index(cur_bg)
-        self.custom_bg_tabs = SegmentedTabs(["기본 스타일 유지", "단색", "두 가지 색 섞기", "사진"])
+        self.custom_bg_tabs = SegmentedTabs(["기본 스타일", "단색", "두 색 섞기", "사진"])
         self.custom_bg_tabs.setCurrentIndex(cur_bg_idx, animate=False)
         self.custom_bg_tabs.currentChanged.connect(self._on_custom_bg_tab)
-        v.addWidget(self.custom_bg_tabs)
+        right.addWidget(self.custom_bg_tabs)
 
         self.custom_bg_stack = QStackedWidget()
-
         # 0: 기본 스타일 유지
         p0 = QWidget()
         p0_v = QVBoxLayout(p0)
@@ -532,7 +608,7 @@ class SettingsDialog(GlassDialog):
 
         dir_row = QHBoxLayout()
         dir_row.addWidget(QLabel("방향"))
-        self.grad_dir = QComboBox()
+        self.grad_dir = no_wheel(QComboBox())
         self.grad_dir.addItem("위에서 아래로", "top_to_bottom")
         self.grad_dir.addItem("왼쪽에서 오른쪽으로", "left_to_right")
         self.grad_dir.addItem("대각선", "diagonal")
@@ -570,78 +646,31 @@ class SettingsDialog(GlassDialog):
         self.custom_bg_stack.addWidget(p3)
 
         self.custom_bg_stack.setCurrentIndex(cur_bg_idx)
-        v.addWidget(self.custom_bg_stack)
+        right.addWidget(self.custom_bg_stack)
 
-        # 2. 내 스타일 관리
-        v.addWidget(section_label("내 스타일 관리"))
+        right.addWidget(section_label("내 스타일 관리"))
         style_btn_row = QHBoxLayout()
-        b_save_style = GlassButton("지금 모양을 내 스타일로 저장…")
+        b_save_style = GlassButton("내 스타일 저장…")
         b_save_style.clicked.connect(self._save_user_style)
-        b_export = GlassButton("파일로 저장")
+        b_export = GlassButton("파일 저장")
         b_export.clicked.connect(self._export_style)
-        b_import = GlassButton("파일에서 불러오기")
+        b_import = GlassButton("파일 불러오기")
         b_import.clicked.connect(self._import_style)
         style_btn_row.addWidget(b_save_style)
         style_btn_row.addWidget(b_export)
         style_btn_row.addWidget(b_import)
-        v.addLayout(style_btn_row)
+        right.addLayout(style_btn_row)
 
-        # 3. 이모지 아이콘을 테마 아이콘으로 바꾸기
-        v.addWidget(section_label("아이콘 변환"))
+        right.addWidget(section_label("아이콘 변환"))
         icon_conv_row = QHBoxLayout()
-        b_conv = GlassButton("이모지 아이콘을 테마 아이콘으로 바꾸기", icon_name="refresh")
+        b_conv = GlassButton("이모지 → 테마 아이콘 변환", icon_name="refresh")
         b_conv.clicked.connect(self.convert_icons.emit)
         icon_conv_row.addWidget(b_conv)
-        icon_conv_row.addWidget(hint_label("버튼에 쓰인 이모지들을 일괄 테마 아이콘으로 전환합니다."), 1)
-        v.addLayout(icon_conv_row)
+        right.addLayout(icon_conv_row)
+        right.addStretch(1)
+        cols.addLayout(right, 1)
 
-        # 4. 길게 누르는 시간
-        v.addWidget(section_label("동작 세부 설정"))
-        self.hold_slider = make_slider(200, 1000, c.hold_ms)
-        self.hold_lab = QLabel(f"{c.hold_ms}ms")
-        self.hold_slider.valueChanged.connect(self._on_hold_changed)
-        v.addLayout(slider_row("길게 누르는 시간", self.hold_slider, self.hold_lab))
-
-        # 5. 컴퓨터 부담 줄이기 (저사양 모드)
-        self.low_spec_toggle = GlassToggle(getattr(c, "low_spec_mode", False))
-        self.low_spec_toggle.toggled.connect(lambda on: self._set("low_spec_mode", on))
-        v.addLayout(toggle_row("컴퓨터 부담 줄이기", "흐림 효과와 화면 캡처 주기를 완화하여 사양이 낮은 PC에서도 부드럽게 작동합니다.", self.low_spec_toggle))
-
-        # 6. 소리 기능 추가 설치 (pycaw)
-        v.addWidget(section_label("소리 제어 확장"))
-        sound_row = QHBoxLayout()
-        from core.dependencies import has_pycaw
-        available = has_pycaw()
-        sound_status = QLabel("설치됨 (앱별 음량 및 음소거 감지 사용 가능)" if available else "추가 설치 필요 (미설치 시 기본 음소거만 작동)")
-        sound_status.setStyleSheet("color: #4ade80;" if available else "color: #fbbf24;")
-        sound_row.addWidget(sound_status, 1)
-        if not available:
-            b_inst = GlassButton("소리 기능 설치")
-            b_inst.clicked.connect(self._install_pycaw)
-            sound_row.addWidget(b_inst)
-        v.addLayout(sound_row)
-
-        # 7. 예전 상태로 되돌리기 (자동 백업)
-        v.addWidget(section_label("자동 백업 및 되돌리기"))
-        bk_row = QHBoxLayout()
-        b_restore = GlassButton("백업 목록에서 되돌리기…", icon_name="undo")
-        b_restore.clicked.connect(self._open_backup_dialog)
-        bk_row.addWidget(b_restore)
-
-        bk_row.addSpacing(16)
-        bk_row.addWidget(QLabel("보관 기간"))
-        self.retention_combo = QComboBox()
-        self.retention_combo.addItem("7일", 7)
-        self.retention_combo.addItem("14일", 14)
-        self.retention_combo.addItem("30일", 30)
-        self.retention_combo.addItem("무제한", 0)
-        cur_days = getattr(c, "backup_retention_days", 14)
-        self.retention_combo.setCurrentIndex(max(0, self.retention_combo.findData(cur_days)))
-        self.retention_combo.currentIndexChanged.connect(lambda _: self._set("backup_retention_days", self.retention_combo.currentData()))
-        bk_row.addWidget(self.retention_combo)
-        bk_row.addStretch(1)
-        v.addLayout(bk_row)
-
+        v.addLayout(cols)
         v.addStretch(1)
         self.stack.addWidget(page_widget)
 
@@ -727,21 +756,41 @@ class SettingsDialog(GlassDialog):
         """테마나 스타일 변경 시 모든 탭의 위젯 값을 최신 설정에 맞춥니다."""
         c = self.config
 
-        # 스타일 카드 체크 표시 동기화
+        # 스타일 카드 체크 표시 동기화:
+        # theme, bg_type, glass_tint 가 같은 카드 중에서 glass_clarity 가 지금 값과 가장 가까운 카드 하나만 선택.
+        # 차이가 15 보다 크면 아무 카드도 선택하지 않기. 같은 조건이면 기본 스타일이 내 스타일보다 우선.
+        current_clarity = getattr(c, "glass_clarity", 20)
+        c_tint = getattr(c, "glass_tint", "")
+
+        best_card_name = None
+        best_diff = 999999
+        best_is_builtin = False
+
         for name, card in self.style_cards.items():
-            is_match = (
-                card.theme_dict.get("theme") == c.theme and
-                card.theme_dict.get("bg_type") == c.bg_type and
-                card.theme_dict.get("glass_tint", "") == getattr(c, "glass_tint", "")
-            )
-            card.setChecked(is_match)
+            t_theme = card.theme_dict.get("theme")
+            t_bg = card.theme_dict.get("bg_type")
+            t_tint = card.theme_dict.get("glass_tint", "")
+            if t_theme == c.theme and t_bg == c.bg_type and t_tint == c_tint:
+                card_clarity = card.theme_dict.get("glass_clarity", 20)
+                diff = abs(card_clarity - current_clarity)
+                if diff <= 15:
+                    is_builtin = (name in BUILTIN_THEMES)
+                    if diff < best_diff or (diff == best_diff and is_builtin and not best_is_builtin):
+                        best_diff = diff
+                        best_card_name = name
+                        best_is_builtin = is_builtin
+
+        for name, card in self.style_cards.items():
+            card.setChecked(name == best_card_name)
 
         # 꾸미기 탭
         if hasattr(self, "theme_tabs"):
             self.theme_tabs.setCurrentIndex(1 if c.theme == "dark" else 0, animate=False)
         if hasattr(self, "clarity_slider"):
             clarity = getattr(c, "glass_clarity", 20)
+            self.clarity_slider.blockSignals(True)
             self.clarity_slider.setValue(clarity)
+            self.clarity_slider.blockSignals(False)
             self.clarity_lab.setText(str(clarity))
         if hasattr(self, "icon_tabs"):
             idx = self.icon_styles.index(c.icon_style) if c.icon_style in self.icon_styles else 0

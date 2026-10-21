@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from PySide6.QtCore import (
     Qt, QRectF, QPointF, QSize, Signal, QVariantAnimation, QEasingCurve, QPoint,
+    QEvent, QObject,
 )
 from PySide6.QtGui import (
     QPainter, QColor, QFont, QPixmap, QKeyEvent, QMouseEvent, QIcon, QPen, QRadialGradient,
@@ -23,6 +24,23 @@ from ui.glass import (
     paint_glass, paint_glass_under, paint_slot, draw_icon, make_aurora, soft_shadow, rounded_path,
     icon_pixmap, get_glass_pixmap,
 )
+
+
+class _NoWheelFilter(QObject):
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel:
+            if not obj.hasFocus():
+                event.ignore()
+                return True
+        return super().eventFilter(obj, event)
+
+_NO_WHEEL_FILTER = _NoWheelFilter()
+
+def no_wheel(widget):
+    """포커스가 없을 때 마우스 휠로 값이 바뀌는 것을 방지합니다."""
+    widget.setFocusPolicy(Qt.StrongFocus)
+    widget.installEventFilter(_NO_WHEEL_FILTER)
+    return widget
 
 
 # ------------------------------------------------------------------ 공통 도우미
@@ -860,7 +878,7 @@ class ShortcutEditor(QWidget):
 
         bottom = QHBoxLayout()
         bottom.setSpacing(8)
-        self.special = QComboBox()
+        self.special = no_wheel(QComboBox())
         self.special.addItem("특수 키 고르기…", "")
         for key, label in ShortcutManager.SPECIAL_KEYS:
             self.special.addItem(label, key)

@@ -24,11 +24,13 @@ ACTION_LABELS = {
     "group": "버튼 묶음",
     "info": "정보 보여 주기 (시계·볼륨 등)",
     "timer": "타이머 · 스톱워치",
+    "close": "다시 누르면 닫기",
 }
 
 ACTION_ICONS = {
     "url": "🌐", "program": "🚀", "file": "📄", "folder": "📁",
     "shortcut": "⌨️", "media": "🔊", "macro": "⚡", "group": "🗂️", "info": "🕒", "timer": "⏱️",
+    "close": "✖️",
 }
 
 
@@ -81,6 +83,16 @@ class ActionExecutor:
                 return ShortcutManager.send_shortcut(data)
             if action_type in ("info", "timer"):
                 return True, ""
+            if action_type == "close":
+                from core.running_state import close_program_windows, close_folder_windows
+                clean = data.strip().strip("\"'")
+                if os.path.isdir(clean):
+                    cnt = close_folder_windows(clean)
+                else:
+                    cnt = close_program_windows(clean)
+                if cnt > 0:
+                    return True, "창을 닫았어요"
+                return False, "이미 꺼져 있어요"
             return False, f"지원하지 않는 동작이에요: {action_type}"
         except Exception as e:  # 어떤 경우에도 덱이 꺼지지 않도록
             return False, f"실행 중 오류: {e}"

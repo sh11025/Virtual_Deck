@@ -27,7 +27,7 @@ from ui.deck_button import DeckButtonWidget
 from ui.glass import paint_glass
 from ui.widgets import (
     GlassDialog, GlassButton, GlassToggle, ColorChips, ShortcutEditor, SegmentedTabs,
-    section_label, hint_label, inform,
+    section_label, hint_label, inform, no_wheel,
 )
 
 
@@ -109,7 +109,7 @@ class ActionEditor(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
-        self.combo = QComboBox()
+        self.combo = no_wheel(QComboBox())
         for t in types:
             icon = ACTION_ICONS.get(t, "▫️")
             self.combo.addItem(f"{icon}  {ACTION_LABELS[t]}", t)
@@ -156,6 +156,12 @@ class ActionEditor(QWidget):
             return self._path_page("file", "열 파일 경로", "기본 연결 프로그램으로 파일을 열어요.")
         if t == "folder":
             return self._path_page("folder", "열 폴더 경로", "파일 탐색기로 폴더를 열어요.")
+        if t == "close":
+            w = QWidget()
+            v = QVBoxLayout(w)
+            v.setContentsMargins(0, 0, 0, 0)
+            v.addWidget(hint_label("실행 중인 프로그램이나 열려 있는 폴더 창을 안전하게 닫습니다."))
+            return w
         if t == "shortcut":
             w = ShortcutEditor()
             w.changed.connect(lambda _: self.changed.emit())
@@ -164,7 +170,7 @@ class ActionEditor(QWidget):
             w = QWidget()
             v = QVBoxLayout(w)
             v.setContentsMargins(0, 0, 0, 0)
-            combo = QComboBox()
+            combo = no_wheel(QComboBox())
             for key, label in ShortcutManager.MEDIA_KEYS:
                 combo.addItem(label, key)
             combo.currentIndexChanged.connect(lambda _: self.changed.emit())
@@ -194,7 +200,7 @@ class ActionEditor(QWidget):
             w = QWidget()
             v = QVBoxLayout(w)
             v.setContentsMargins(0, 0, 0, 0)
-            combo = QComboBox()
+            combo = no_wheel(QComboBox())
             for key, (label, _icon) in INFO_KINDS.items():
                 combo.addItem(label, key)
             combo.currentIndexChanged.connect(lambda _: self.changed.emit())
@@ -236,10 +242,10 @@ class ActionEditor(QWidget):
         presets.addStretch(1)
         cb.addLayout(presets)
         tr = QHBoxLayout()
-        w.minutes = QSpinBox()
+        w.minutes = no_wheel(QSpinBox())
         w.minutes.setRange(0, 1440)
         w.minutes.setSuffix(" 분")
-        w.seconds = QSpinBox()
+        w.seconds = no_wheel(QSpinBox())
         w.seconds.setRange(0, 59)
         w.seconds.setSuffix(" 초")
         for sp in (w.minutes, w.seconds):
@@ -340,6 +346,9 @@ class ActionEditor(QWidget):
         if t == "macro":
             return t, self.macro_json if parse_steps(self.macro_json) else ""
         return t, ""
+
+    def get_type(self) -> str:
+        return self.value()[0]
 
     def set_value(self, t: str, data: str):
         if t not in self.types:
@@ -477,7 +486,7 @@ class IconPicker(QWidget):
         sc.setWidgetResizable(False)
         sc.setFrameShape(QFrame.NoFrame)
         sc.setWidget(self.theme_grid)
-        sc.setFixedHeight(214)
+        sc.setFixedHeight(184)
         self.stack.addWidget(sc)
 
         # 이모지
@@ -546,11 +555,11 @@ class IconPicker(QWidget):
 class ButtonEditorDialog(GlassDialog):
     PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "macro", "group", "info", "timer"]
     SPANS = [(1, 1), (2, 1), (1, 2), (2, 2)]
-    OFF_TYPES = ["none", "url", "program", "file", "folder", "shortcut", "media", "macro"]
+    OFF_TYPES = ["none", "close", "url", "program", "file", "folder", "shortcut", "media", "macro"]
 
     def __init__(self, data: DeckButtonData, in_folder: bool = False, icon_style: str = "line",
                  parent=None, modeless: bool = True):
-        super().__init__("버튼 설정", "모양과 누르면 할 일을 정해요", parent=parent, width=560, modeless=modeless)
+        super().__init__("버튼 설정", "모양과 누르면 할 일을 정해요", parent=parent, width=820, modeless=modeless)
         self.data = data
         self.in_folder = in_folder
         self.cleared = False
@@ -561,72 +570,74 @@ class ButtonEditorDialog(GlassDialog):
         self.fetcher.done.connect(self._on_favicon)
         types = [t for t in self.PRIMARY_TYPES if not (in_folder and t == "group")]
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        content = QWidget()
-        content.setAttribute(Qt.WA_TranslucentBackground, True)
-        v = QVBoxLayout(content)
-        v.setContentsMargins(2, 0, 10, 0)
-        v.setSpacing(10)
-        scroll.setWidget(content)
-        self.body.addWidget(scroll, 1)
+        cols_lay = QHBoxLayout()
+        cols_lay.setSpacing(18)
 
-        # 1. 이름 칸 + 켜기/끄기 스위치 (왼쪽), 오른쪽에는 미리보기
-        top = QHBoxLayout()
-        top.setSpacing(16)
-        left_v = QVBoxLayout()
-        left_v.setSpacing(8)
-        left_v.addWidget(section_label("이름"))
+        # ------------------------------------------------ 왼쪽: 무엇을 할까요
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_content = QWidget()
+        left_content.setAttribute(Qt.WA_TranslucentBackground, True)
+        left_v = QVBoxLayout(left_content)
+        left_v.setContentsMargins(2, 0, 8, 0)
+        left_v.setSpacing(10)
+        left_scroll.setWidget(left_content)
+        cols_lay.addWidget(left_scroll, 1)
+
+        # 1. 이름 칸 + 켜기/끄기 스위치 (한 줄)
+        name_toggle_row = QHBoxLayout()
+        name_toggle_row.setSpacing(12)
+
+        name_v = QVBoxLayout()
+        name_v.setSpacing(4)
+        name_v.addWidget(section_label("이름"))
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("버튼에 보일 이름 (비우면 자동)")
         self.name_edit.textChanged.connect(self._update_preview)
-        left_v.addWidget(self.name_edit)
+        name_v.addWidget(self.name_edit)
+        name_toggle_row.addLayout(name_v, 1)
 
+        toggle_v = QVBoxLayout()
+        toggle_v.setSpacing(4)
+        toggle_v.addWidget(section_label("스위치"))
         toggle_row = QHBoxLayout()
-        toggle_row.setSpacing(8)
-        toggle_lbl = QLabel("누를 때마다 켜기/끄기")
-        toggle_lbl.setFont(theme.ui_font(13))
-        toggle_row.addWidget(toggle_lbl)
-        toggle_row.addStretch(1)
+        toggle_row.setSpacing(6)
         self.toggle = GlassToggle()
         self.toggle.toggled.connect(self._on_toggle)
-        toggle_row.addWidget(self.toggle, 0, Qt.AlignVCenter)
-        left_v.addLayout(toggle_row)
-        left_v.addStretch(1)
+        toggle_lbl = QLabel("누를 때마다 켜기/끄기")
+        toggle_lbl.setFont(theme.ui_font(12))
+        toggle_row.addWidget(self.toggle)
+        toggle_row.addWidget(toggle_lbl)
+        toggle_v.addLayout(toggle_row)
+        name_toggle_row.addLayout(toggle_v)
+        left_v.addLayout(name_toggle_row)
 
-        top.addLayout(left_v, 1)
-
-        self.preview_host = QWidget()
-        self.preview_host.setFixedSize(124, 124)
-        self.preview = DeckButtonWidget(data.clone(), 108, True, icon_style, self.preview_host)
-        self.preview.preview_mode = True
-        self.preview.move(8, 6)
-        top.addWidget(self.preview_host, 0, Qt.AlignTop)
-        v.addLayout(top)
+        self.toggle_hint = hint_label("누를 때마다 불이 켜지고 꺼져요")
+        left_v.addWidget(self.toggle_hint)
 
         # 2. 누르면 할 일
-        v.addWidget(section_label("누르면 할 일"))
+        left_v.addWidget(section_label("누르면 할 일"))
         self.action = ActionEditor(types)
         self.action.changed.connect(self._on_action_changed)
         self.action.path_picked.connect(lambda *_: self._on_action_changed())
-        v.addWidget(self.action)
+        left_v.addWidget(self.action)
 
         # 3. 버튼 크기
-        v.addWidget(section_label("버튼 크기"))
+        left_v.addWidget(section_label("버튼 크기"))
         self.span_tabs = SegmentedTabs(["1칸", "가로 2칸", "세로 2칸", "4칸 (2×2)"])
         self.span_tabs.currentChanged.connect(lambda _: self._update_preview())
-        v.addWidget(self.span_tabs)
-        v.addWidget(hint_label("큰 버튼이 덮는 칸의 기존 버튼은 숨겨지며, 1칸으로 되돌리면 다시 나타납니다."))
+        left_v.addWidget(self.span_tabs)
+        left_v.addWidget(hint_label("큰 버튼이 덮는 칸의 기존 버튼은 숨겨집니다."))
 
         # 4. 길게 누르면 할 일
-        v.addWidget(section_label("길게 누르면 할 일"))
-        v.addWidget(hint_label("꾹 누르고 있으면 이 동작을 실행합니다."))
+        left_v.addWidget(section_label("길게 누르면 할 일"))
+        left_v.addWidget(hint_label("꾹 누르고 있으면 이 동작을 실행합니다."))
         self.hold_action = ActionEditor(self.OFF_TYPES, none_hint="길게 눌러도 따로 하는 일이 없어요.")
         self.hold_action.changed.connect(self._update_preview)
-        v.addWidget(self.hold_action)
+        left_v.addWidget(self.hold_action)
 
-        # 5. 켜진 상태에서 누르면 할 일 (켜기/끄기 스위치를 켰을 때만 보이기)
+        # 5. 켜진 상태에서 누르면 할 일 (켜기/끄기 스위치를 켰을 때만)
         self.off_box = QWidget()
         ob = QVBoxLayout(self.off_box)
         ob.setContentsMargins(0, 0, 0, 0)
@@ -635,9 +646,34 @@ class ButtonEditorDialog(GlassDialog):
         ob.addWidget(hint_label("‘동작 없음’이면 켤 때와 같은 동작을 다시 실행합니다."))
         self.off_action = ActionEditor(self.OFF_TYPES, none_hint="켤 때와 같은 동작을 다시 실행해요.")
         ob.addWidget(self.off_action)
-        v.addWidget(self.off_box)
+        left_v.addWidget(self.off_box)
+        left_v.addStretch(1)
 
-        # 6. 아이콘
+        # ------------------------------------------------ 오른쪽: 어떻게 보일까요
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setFrameShape(QFrame.NoFrame)
+        right_content = QWidget()
+        right_content.setAttribute(Qt.WA_TranslucentBackground, True)
+        right_v = QVBoxLayout(right_content)
+        right_v.setContentsMargins(8, 0, 2, 0)
+        right_v.setSpacing(10)
+        right_scroll.setWidget(right_content)
+        cols_lay.addWidget(right_scroll, 1)
+
+        # 1. 미리보기 (중앙 정렬)
+        preview_wrap = QHBoxLayout()
+        preview_wrap.addStretch(1)
+        self.preview_host = QWidget()
+        self.preview_host.setFixedSize(124, 124)
+        self.preview = DeckButtonWidget(data.clone(), 108, True, icon_style, self.preview_host)
+        self.preview.preview_mode = True
+        self.preview.move(8, 6)
+        preview_wrap.addWidget(self.preview_host)
+        preview_wrap.addStretch(1)
+        right_v.addLayout(preview_wrap)
+
+        # 2. 아이콘
         ih = QHBoxLayout()
         ih.addWidget(section_label("아이콘"))
         ih.addStretch(1)
@@ -645,13 +681,13 @@ class ButtonEditorDialog(GlassDialog):
         b_auto.setToolTip("지금 고른 동작에 맞는 테마 아이콘으로")
         b_auto.clicked.connect(self._auto_icon)
         ih.addWidget(b_auto)
-        v.addLayout(ih)
+        right_v.addLayout(ih)
         self.picker = IconPicker(icon_style)
         self.picker.picked.connect(self._set_icon)
         self.picker.fetch_requested.connect(self._fetch_icon)
-        v.addWidget(self.picker)
+        right_v.addWidget(self.picker)
 
-        # 7. 아이콘 색 · 유리 색
+        # 3. 아이콘 색 · 유리 색
         colors_box = QVBoxLayout()
         colors_box.setSpacing(6)
         c_row1 = QHBoxLayout()
@@ -667,11 +703,13 @@ class ButtonEditorDialog(GlassDialog):
         self.colors.changed.connect(lambda _: self._update_preview())
         c_row2.addWidget(self.colors, 1)
         colors_box.addLayout(c_row2)
-        v.addLayout(colors_box)
-        v.addWidget(hint_label("아이콘 색의 ‘A’는 버튼 색에 맞춰 자동으로 고릅니다."))
-        v.addStretch(1)
+        right_v.addLayout(colors_box)
+        right_v.addWidget(hint_label("아이콘 색의 ‘A’는 버튼 색에 맞춰 자동으로 고릅니다."))
+        right_v.addStretch(1)
 
-        # 아래 버튼
+        self.body.addLayout(cols_lay, 1)
+
+        # 아래 버튼 줄
         self.clear_btn = GlassButton("비우기", icon_name="trash")
         self.clear_btn.clicked.connect(self._on_clear)
         self.footer.addWidget(self.clear_btn)
@@ -684,8 +722,10 @@ class ButtonEditorDialog(GlassDialog):
         self.footer.addWidget(save)
 
         self._load()
-        screen_h = (parent.screen() if parent else self.screen()).availableGeometry().height()
-        self.resize(self.width(), min(900, int(screen_h * 0.9)))
+        avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
+        dialog_w = min(820, int(avail.width() * 0.90))
+        dialog_h = min(int(avail.height() * 0.85), 680)
+        self.resize(dialog_w, dialog_h)
 
     # ------------------------------------------------------------ 불러오기
     def _load(self):
@@ -704,6 +744,7 @@ class ButtonEditorDialog(GlassDialog):
         if d.is_empty() and not d.icon:
             self.icon_value = ""
         self.picker.show_for(self.icon_value)
+        self._sync_toggle_hint()
         self._update_preview()
         self._initial_data = self.result_data().clone()
 
@@ -741,8 +782,22 @@ class ButtonEditorDialog(GlassDialog):
         ]
         return any(getattr(init, a) != getattr(cur, a) for a in attrs)
 
+    def _sync_toggle_hint(self):
+        act_type = self.action.get_type()
+        if act_type in ("program", "folder"):
+            self.toggle_hint.setText("켜져 있으면 불이 들어오고, 다시 누르면 닫아요")
+        else:
+            self.toggle_hint.setText("누를 때마다 불이 켜지고 꺼져요")
+
     def _on_toggle(self, on):
         self.off_box.setVisible(on)
+        if on:
+            cur_off = self.off_action.get_type()
+            if not cur_off or cur_off == "none":
+                act_type = self.action.get_type()
+                if act_type in ("program", "folder"):
+                    self.off_action.set_value("close", "")
+        self._sync_toggle_hint()
         self._update_preview()
 
     def _set_icon(self, icon: str, manual: bool = True):
@@ -753,6 +808,14 @@ class ButtonEditorDialog(GlassDialog):
         self._update_preview()
 
     def _on_action_changed(self, *_):
+        self._sync_toggle_hint()
+        if self.toggle.isChecked():
+            act_type = self.action.get_type()
+            cur_off = self.off_action.get_type()
+            if cur_off == "close" and act_type not in ("program", "folder"):
+                self.off_action.set_value("none", "")
+            elif cur_off in ("none", "") and act_type in ("program", "folder"):
+                self.off_action.set_value("close", "")
         # 아이콘을 직접 고르지 않았다면 동작에 맞는 테마 아이콘으로 따라 바꿔 줌
         if self._icon_is_auto():
             t, data = self.action.value()

@@ -7,7 +7,7 @@
 **화면 위에 띄워 두는 나만의 투명 유리 버튼판**
 
 <p>
-  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.2-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.2-blue.svg?style=flat-square" alt="버전 1.6.2" /></a>
+  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.3-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.3-blue.svg?style=flat-square" alt="버전 1.6.3" /></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6.svg?style=flat-square&logo=windows" alt="Windows 10/11" />
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/GUI-PySide6%20(Qt6)-41CD52.svg?style=flat-square&logo=qt" alt="PySide6" />
@@ -32,7 +32,7 @@
 
 | 종류 | 파일 이름 | 크기 | 설명 | 다운로드 |
 |---|---|---|---|---|
-| **설치 파일 (추천)** | `VirtualDeck-1.6.2-Setup.exe` | **38.4 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.2-Setup.exe) |
+| **설치 파일 (추천)** | `VirtualDeck-1.6.3-Setup.exe` | **38.4 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.3-Setup.exe) |
 
 
 > [!TIP]
@@ -318,7 +318,7 @@ flowchart TD
     C --> D["PyInstaller 폴더 패키징"]:::box
     D --> E["불필요한 파일 삭제 (28MB 절약)"]:::box
     E --> F["Inno Setup (초고압축 한글 설치 파일)"]:::box
-    F --> G["VirtualDeck-1.6.2-Setup.exe (38.4 MB)"]:::done
+    F --> G["VirtualDeck-1.6.3-Setup.exe (38.4 MB)"]:::done
 ```
 
 ---
@@ -359,6 +359,7 @@ python build_exe.py
 
 ### 📜 버전 기록 요약
 
+- **v1.6.3**: 스타일 카드 중복 선택 방지(맑음·젖빛 구분), 화면 끝 자석 스냅 시 상단 메뉴 잘림 해결, 포커스 없는 입력창 휠 오작동 방지, 버튼 설정 창 및 환경설정 창 820px 2칸 레이아웃 개편(한눈에 보기), 켜기/끄기 실제 프로그램·폴더 실행 상태 실시간 감지 및 창 닫기 지원.
 - **v1.6.2**: 불필요한 DLL 및 다국어 번역 파일 제거로 프로그램 용량 30MB 다이어트, 인스톨러 초고압축(38.4MB) 적용.
 - **v1.6.1**: 색 유리(하늘/노을/숲) 캡처 배경 합성 오류 수정 및 코드 인스펙션 완료.
 - **v1.6.0**: 드래그 이동 사전 캡처(0.44ms), 여백 대폭 축소, 떠 있는 알약형 상단 메뉴, 720px 전면 개편 4개 탭 환경설정 창, 열린 채로 조작하는 독립 창 전환.

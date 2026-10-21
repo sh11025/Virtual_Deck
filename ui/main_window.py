@@ -357,6 +357,9 @@ class MainWindow(QWidget):
 
         # 위쪽 메뉴 (떠 있는 유리 알약)
         self.header_bar = HeaderBar(self)
+        sp_head = self.header_bar.sizePolicy()
+        sp_head.setRetainSizeWhenHidden(True)
+        self.header_bar.setSizePolicy(sp_head)
         head = QHBoxLayout(self.header_bar)
         head.setContentsMargins(6, 4, 6, 4)
         head.setSpacing(3)
@@ -579,10 +582,29 @@ class MainWindow(QWidget):
             self._enter_folder(btn_id)
             return
         a_type, a_data = btn.action_type, btn.action_data
-        if btn.toggle and btn.toggle_on and btn.off_action_type != "none" and btn.off_action_data:
-            a_type, a_data = btn.off_action_type, btn.off_action_data
-
         widget = self.button_widgets.get(btn_id)
+
+        if btn.toggle and btn.toggle_on:
+            if btn.off_action_type not in ("", "none") and (btn.off_action_data or btn.off_action_type == "close"):
+                a_type = btn.off_action_type
+                a_data = btn.off_action_data or btn.action_data
+            else:
+                # F-3: 불이 켜진 상태에서 눌렀는데 off 동작이 비어 있으면
+                if btn.action_type in ("program", "folder"):
+                    from core.running_state import close_program_windows, close_folder_windows
+                    cnt = close_program_windows(btn.action_data) if btn.action_type == "program" else close_folder_windows(btn.action_data)
+                    btn.toggle_on = False
+                    self.save()
+                    if widget:
+                        widget.update_data(btn)
+                        widget.play_toggle(False)
+                    if cnt == 0:
+                        self.show_toast("이미 꺼져 있어요", "info")
+                    return
+
+        if a_type == "close" and not a_data:
+            a_data = btn.action_data
+
         if a_type == "info":
             if widget:
                 widget.flash(True)
@@ -637,6 +659,7 @@ class MainWindow(QWidget):
 
     # ================================================================ 1초마다: 정보 버튼 · 실제 상태 맞추기
     def _on_live_tick(self):
+        self._live_tick_count = getattr(self, "_live_tick_count", 0) + 1
         # 타이머는 덱을 숨겨도 계속 흘러가야 하므로 먼저 확인
         self.timers.tick(self._timer_data_for_key)
         self.live_timer.setInterval(250 if self.timers.any_running() else 1000)
@@ -645,19 +668,32 @@ class MainWindow(QWidget):
         from core.system_info import read_info
         from core import audio_state
         changed = False
-        for bid, w in self.button_widgets.items():
-            d = w.button_data
+        for bid, bw in self.button_widgets.items():
+            d = bw.button_data
+            btn_orig = self.current_buttons().get(bid)
             if d.action_type == "info":
-                w.set_info(read_info(d.action_data))
+                bw.set_info(read_info(d.action_data))
             elif d.action_type == "timer":
-                w.set_timer_view(self.timers.view(self._macro_key(bid), d.action_data))
+                bw.set_timer_view(self.timers.view(self._macro_key(bid), d.action_data))
             elif (self.config.sync_toggle_state and d.toggle and d.action_type == "media"
                   and d.action_data in ("VolumeMute", "MicMute")):
                 actual = audio_state.get_mute("speaker" if d.action_data == "VolumeMute" else "mic")
                 if actual is not None and actual != d.toggle_on:
                     d.toggle_on = actual
-                    w.update_data(d)
+                    if btn_orig:
+                        btn_orig.toggle_on = actual
+                    bw.update_data(d)
                     changed = True
+            elif self.config.sync_toggle_state and d.toggle and d.action_type in ("program", "folder"):
+                if self._live_tick_count % 2 == 0:
+                    from core import running_state
+                    actual = running_state.is_program_running(d.action_data) if d.action_type == "program" else running_state.is_folder_open(d.action_data)
+                    if actual is not None and actual != d.toggle_on:
+                        d.toggle_on = actual
+                        if btn_orig:
+                            btn_orig.toggle_on = actual
+                        bw.update_data(d)
+                        changed = True
         if changed:
             self.save()
 
@@ -1215,24 +1251,57 @@ class MainWindow(QWidget):
     def mouseReleaseEvent(self, e):
         if self._drag_offset is not None:
             self._drag_offset = None
+            clamped = self._clamp_to_screen(self.pos())
+            if clamped != self.pos():
+                self.move(clamped)
             self.config.window_x, self.config.window_y = self.x(), self.y()
             self.save()
             self.grabber.refresh(force=True)
 
+    def _clamp_to_screen(self, pos: QPoint) -> QPoint:
+        """메뉴나 버튼판이 화면 밖으로 벗어나지 않도록 화면 안으로 밀어 넣습니다."""
+        screen = QApplication.screenAt(pos) or QApplication.screenAt(QCursor.pos()) or self.screen()
+        avail = screen.availableGeometry()
+        gap = 6
+        header_geo = self.header_bar.geometry().translated(pos)
+        panel_geo = self.panel.geometry().translated(pos)
+        combo = header_geo.united(panel_geo)
+
+        x, y = pos.x(), pos.y()
+        if combo.left() < avail.left() + gap:
+            x += (avail.left() + gap) - combo.left()
+        elif combo.right() > avail.right() - gap:
+            x -= combo.right() - (avail.right() - gap)
+
+        if header_geo.top() < avail.top() + gap:
+            y += (avail.top() + gap) - header_geo.top()
+        elif panel_geo.bottom() > avail.bottom() - gap:
+            y -= panel_geo.bottom() - (avail.bottom() - gap)
+
+        return QPoint(x, y)
+
     def _snapped(self, pos: QPoint) -> QPoint:
         screen = QApplication.screenAt(QCursor.pos()) or self.screen()
         avail = screen.availableGeometry()
-        panel = self.panel.geometry().translated(pos)
+        header_geo = self.header_bar.geometry().translated(pos)
+        panel_geo = self.panel.geometry().translated(pos)
+        combo = header_geo.united(panel_geo)
         x, y = pos.x(), pos.y()
         gap = 6
-        if abs(panel.left() - avail.left()) < SNAP_DISTANCE:
-            x += avail.left() + gap - panel.left()
-        elif abs(panel.right() - avail.right()) < SNAP_DISTANCE:
-            x += avail.right() - gap - panel.right()
-        if abs(panel.top() - avail.top()) < SNAP_DISTANCE:
-            y += avail.top() + gap - panel.top()
-        elif abs(panel.bottom() - avail.bottom()) < SNAP_DISTANCE:
-            y += avail.bottom() - gap - panel.bottom()
+
+        # 좌우: 버튼판 + 메뉴 합친 사각형 기준
+        if abs(combo.left() - avail.left()) < SNAP_DISTANCE:
+            x += avail.left() + gap - combo.left()
+        elif abs(combo.right() - avail.right()) < SNAP_DISTANCE:
+            x += avail.right() - gap - combo.right()
+
+        # 위쪽 끝: 메뉴 윗변 = 화면 위쪽 + 6
+        if abs(header_geo.top() - avail.top()) < SNAP_DISTANCE:
+            y += avail.top() + gap - header_geo.top()
+        # 아래쪽 끝: 버튼판 아랫변 = 화면 아래쪽 - 6
+        elif abs(panel_geo.bottom() - avail.bottom()) < SNAP_DISTANCE:
+            y += avail.bottom() - gap - panel_geo.bottom()
+
         return QPoint(x, y)
 
     def moveEvent(self, e):
@@ -1244,10 +1313,12 @@ class MainWindow(QWidget):
         if x is not None and y is not None:
             for s in QApplication.screens():
                 if s.availableGeometry().adjusted(-40, -40, 40, 40).contains(QPoint(x + 60, y + 30)):
-                    self.move(x, y)
+                    clamped = self._clamp_to_screen(QPoint(x, y))
+                    self.move(clamped)
                     return
         avail = QApplication.primaryScreen().availableGeometry()
-        self.move(avail.right() - self.width() - 24, avail.top() + 120)
+        target = QPoint(avail.right() - self.width() - 24, avail.top() + 120)
+        self.move(self._clamp_to_screen(target))
 
     # ================================================================ 안 쓸 때 흐려지기 & 위쪽 메뉴 애니메이션
     def enterEvent(self, e):

@@ -22,6 +22,7 @@ from ui.theme import T
 from ui.glass import paint_slot, paint_glass
 from ui.widgets import (
     GlassDialog, GlassButton, GlassToggle, ShortcutEditor, section_label, hint_label, inform, qt_key_to_name,
+    no_wheel,
 )
 
 
@@ -187,7 +188,7 @@ class MacroEditorDialog(GlassDialog):
         # 단계 입력
         self.editor_title = section_label("새 순서 추가")
         self.body.addWidget(self.editor_title)
-        self.type_combo = QComboBox()
+        self.type_combo = no_wheel(QComboBox())
         for key, label in STEP_TYPES.items():
             self.type_combo.addItem(label, key)
         self.type_combo.currentIndexChanged.connect(self._on_type)
@@ -216,7 +217,7 @@ class MacroEditorDialog(GlassDialog):
         med = QWidget()
         ml = QVBoxLayout(med)
         ml.setContentsMargins(0, 0, 0, 0)
-        self.media_combo = QComboBox()
+        self.media_combo = no_wheel(QComboBox())
         for key, label in ShortcutManager.MEDIA_KEYS:
             self.media_combo.addItem(label, key)
         ml.addWidget(self.media_combo)
