@@ -1,0 +1,4 @@
+PySide6>=6.5.0
+pyinstaller>=6.0.0
+# 음소거 상태 맞추기, 마이크 음소거, 볼륨 % (Windows 전용, 없어도 나머지는 동작)
+pycaw>=20230407; sys_platform == "win32"

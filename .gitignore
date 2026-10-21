@@ -1,0 +1,20 @@
+# 파이썬 자동 생성
+__pycache__/
+*.pyc
+
+# 빌드 산출물
+build/
+*.spec
+assets/
+dist/*
+!dist/*.exe
+dist/old/
+
+# 개인 설정 · 자동 백업 · 캐시
+data/config.json*
+data/backups/
+data/cache/
+data/.running.lock
+
+# 기타 보관용 폴더
+_backup_원본/

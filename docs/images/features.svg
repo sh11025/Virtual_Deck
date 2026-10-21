@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 370" width="100%" height="100%">
+  <defs>
+    <style>
+      .title { font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; font-size: 16px; font-weight: 700; fill: #ffffff; }
+      .desc { font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; font-size: 13px; fill: #94a3b8; }
+      .badge { font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; font-size: 11px; font-weight: 600; }
+    </style>
+  </defs>
+
+  <!-- 카드 1: 유리 감성 디자인 -->
+  <g transform="translate(10, 10)">
+    <rect width="280" height="165" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+    <rect x="20" y="20" width="40" height="40" rx="10" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/>
+    <rect x="27" y="29" width="18" height="16" rx="4" fill="none" stroke="#38bdf8" stroke-width="1.8" opacity="0.6"/>
+    <rect x="33" y="33" width="18" height="16" rx="4" fill="#38bdf8" fill-opacity="0.25" stroke="#38bdf8" stroke-width="1.8"/>
+    <text x="75" y="45" class="title">유리 감성 디자인</text>
+    <text x="20" y="85" class="desc">화면을 은은하게 비추는 아크릴 유리와</text>
+    <text x="20" y="105" class="desc">7가지 원클릭 스타일(맑음·밤·젖빛 등).</text>
+    <text x="20" y="140" class="badge" style="fill: #38bdf8;">투명 아크릴 시스템</text>
+  </g>
+
+  <!-- 카드 2: 0.44ms 초고속 반응 -->
+  <g transform="translate(310, 10)">
+    <rect width="280" height="165" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+    <rect x="20" y="20" width="40" height="40" rx="10" fill="#0f172a" stroke="#22c55e" stroke-width="1.5"/>
+    <polygon points="42,25 31,37 39,37 37,53 49,40 41,40" fill="#22c55e"/>
+    <text x="75" y="45" class="title">0.44ms 초고속 반응</text>
+    <text x="20" y="85" class="desc">창을 마우스로 빠르게 끌어도 버벅거림</text>
+    <text x="20" y="105" class="desc">없이 부드럽게 60fps 로 따라옵니다.</text>
+    <text x="20" y="140" class="badge" style="fill: #22c55e;">화면 사전 캡처 기술</text>
+  </g>
+
+  <!-- 카드 3: 설정 창 열어 둔 채로 -->
+  <g transform="translate(610, 10)">
+    <rect width="280" height="165" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+    <rect x="20" y="20" width="40" height="40" rx="10" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5"/>
+    <rect x="27" y="28" width="16" height="14" rx="2" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
+    <line x1="27" y1="32" x2="43" y2="32" stroke="#f59e0b" stroke-width="1.2"/>
+    <rect x="33" y="33" width="19" height="17" rx="3" fill="#0f172a" stroke="#f59e0b" stroke-width="1.8"/>
+    <line x1="33" y1="38" x2="52" y2="38" stroke="#f59e0b" stroke-width="1.2"/>
+    <text x="75" y="45" class="title">설정 창 열어 둔 채로</text>
+    <text x="20" y="85" class="desc">설정을 바꾸면서 버튼을 누르거나</text>
+    <text x="20" y="105" class="desc">버튼 자리를 바로 옮길 수 있어요.</text>
+    <text x="20" y="140" class="badge" style="fill: #f59e0b;">자유로운 독립 창</text>
+  </g>
+
+  <!-- 카드 4: 다채로운 동작 지원 -->
+  <g transform="translate(10, 195)">
+    <rect width="280" height="165" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+    <rect x="20" y="20" width="40" height="40" rx="10" fill="#0f172a" stroke="#ec4899" stroke-width="1.5"/>
+    <circle cx="40" cy="40" r="13" fill="none" stroke="#ec4899" stroke-width="1.8"/>
+    <circle cx="40" cy="40" r="8" fill="none" stroke="#ec4899" stroke-width="1.6" opacity="0.6"/>
+    <circle cx="40" cy="40" r="3.5" fill="#ec4899"/>
+    <text x="75" y="45" class="title">다채로운 동작 지원</text>
+    <text x="20" y="85" class="desc">프로그램 열기, 단축키, 연속 동작,</text>
+    <text x="20" y="105" class="desc">소리 끄기, 뽀모도로 타이머까지 완비.</text>
+    <text x="20" y="140" class="badge" style="fill: #ec4899;">강력한 동작 엔진</text>
+  </g>
+
+  <!-- 카드 5: 스마트 테마 아이콘 -->
+  <g transform="translate(310, 195)">
+    <rect width="280" height="165" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+    <rect x="20" y="20" width="40" height="40" rx="10" fill="#0f172a" stroke="#8b5cf6" stroke-width="1.5"/>
+    <path d="M40 27 C33 27 28 32 28 38 C28 44 32 49 37 49 C39 49 40 47.5 40 46 C40 45 39.5 44 39.5 43 C39.5 41.5 41 40 43 40 L45 40 C49 40 52 37 52 33 C52 28 47 27 40 27 Z" fill="none" stroke="#8b5cf6" stroke-width="1.8"/>
+    <circle cx="33" cy="34" r="1.5" fill="#8b5cf6"/>
+    <circle cx="39" cy="32" r="1.5" fill="#8b5cf6"/>
+    <circle cx="45" cy="35" r="1.5" fill="#8b5cf6"/>
+    <text x="75" y="45" class="title">스마트 테마 아이콘</text>
+    <text x="20" y="85" class="desc">동작에 맞는 78개 벡터 아이콘 자동 매칭,</text>
+    <text x="20" y="105" class="desc">이모지 및 실행 파일 아이콘 즉시 추출.</text>
+    <text x="20" y="140" class="badge" style="fill: #8b5cf6;">78개 벡터 아이콘</text>
+  </g>
+
+  <!-- 카드 6: 방송 & 캡처 보호 -->
+  <g transform="translate(610, 195)">
+    <rect width="280" height="165" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+    <rect x="20" y="20" width="40" height="40" rx="10" fill="#0f172a" stroke="#06b6d4" stroke-width="1.5"/>
+    <path d="M40 26 L49 30 C49 41 44 47 40 52 C36 47 31 41 31 30 Z" fill="none" stroke="#06b6d4" stroke-width="1.8"/>
+    <path d="M40 30 L45 32.5 C45 39 42 44 40 47.5 Z" fill="#06b6d4" fill-opacity="0.35"/>
+    <text x="75" y="45" class="title">방송 &amp; 캡처 보호</text>
+    <text x="20" y="85" class="desc">방송/녹화 화면에서 버튼판을 숨기고,</text>
+    <text x="20" y="105" class="desc">필요할 땐 1분간 보이게 켤 수 있습니다.</text>
+    <text x="20" y="140" class="badge" style="fill: #06b6d4;">윈도우 캡처 제외 연동</text>
+  </g>
+</svg>

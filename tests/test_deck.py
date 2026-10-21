@@ -1,0 +1,454 @@
+"""
+Virtual Deck 동작 테스트
+고친 뒤에 이 파일을 실행하면 주요 기능이 그대로 동작하는지 한 번에 확인할 수 있습니다.
+
+실행:  python tests/test_deck.py      (또는 run_tests.bat 더블클릭)
+
+- 실제 설정(data 폴더)은 건드리지 않고 임시 폴더를 씁니다.
+- 실제로 키를 보내거나 소리를 바꾸지 않도록 실행 부분은 가짜로 바꿔서 테스트합니다.
+- 창이 화면에 뜨지 않게 '화면 없는 모드'로 실행합니다.
+"""
+
+import json
+import os
+import sys
+import tempfile
+import time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+TMP = tempfile.mkdtemp(prefix="vdeck_test_")
+os.environ["VIRTUALDECK_DATA_DIR"] = TMP
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtCore import QPointF, QPoint, QEventLoop, QTimer, Qt, QEvent  # noqa: E402
+from PySide6.QtGui import QKeyEvent  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+app = QApplication(sys.argv)
+app.setQuitOnLastWindowClosed(False)
+
+from ui import theme  # noqa: E402
+theme.load_fonts()
+
+import core.action_executor as AE  # noqa: E402
+import core.system_integration as SI  # noqa: E402
+from core import paths  # noqa: E402
+from core.shortcut_manager import ShortcutManager as SM  # noqa: E402
+from models.button_model import DeckButtonData as B  # noqa: E402
+from models.config_model import AppConfig  # noqa: E402
+from services.storage_service import StorageService  # noqa: E402
+
+# ---- 실제 동작은 가짜로 (키 보내기, 전역 단축키 등록 없음)
+executed = []
+AE.ActionExecutor.execute = staticmethod(lambda t, d: (executed.append((t, d)) or (True, "ok")))
+SI.GlobalHotkey.register = lambda self, hwnd, sc: False
+
+from ui.main_window import MainWindow  # noqa: E402
+MainWindow._check_pycaw = lambda self: None   # 테스트 중에는 설치 질문 창을 띄우지 않음
+
+results = []
+
+
+def check(cond, msg):
+    results.append(bool(cond))
+    print(("  OK  " if cond else "  실패 ") + msg)
+
+
+def wait(ms):
+    loop = QEventLoop()
+    QTimer.singleShot(ms, loop.quit)
+    loop.exec()
+
+
+def section(title):
+    print(f"\n[{title}]")
+
+
+# ====================================================================
+section("단축키 해석")
+for text, n in [("Ctrl + Shift + S", 3), ("Alt + Left", 2), ("Win + Shift + S", 3), ("Ctrl + +", 2),
+                ("F13", 1), ("VolumeUp", 1), ("Ctrl+C", 2)]:
+    codes, err = SM.parse(text)
+    check(len(codes) == n, f"{text} → 키 {len(codes)}개 {err}")
+check(SM.parse("Ctrl + Foo")[0] == [], "모르는 키는 거절")
+
+# ====================================================================
+section("메인 덱 · 버튼 편집")
+st = StorageService()
+w = MainWindow(st)
+w.show()
+app.processEvents()
+btns = w.current_buttons()
+check(len(btns) >= 9, "기본 버튼 생성")
+
+a, b = btns["btn_0_0"].name, btns["btn_0_1"].name
+w._swap_buttons("btn_0_0", "btn_0_1")
+btns = w.current_buttons()
+check(btns["btn_0_0"].name == b and btns["btn_0_1"].name == a, "끌어서 위치 바꾸기")
+w.undo()
+check(w.current_buttons()["btn_0_0"].name == a, "되돌리기")
+
+btns = w.current_buttons()
+btns["btn_2_0"] = B("btn_2_0", "묶음", "icon:grid", "group", "", 2, 0)
+w._handle_click("btn_2_0")
+check(w.folder_id == "btn_2_0" and len(w.current_buttons()) >= 9, "버튼 묶음 열기")
+w.current_buttons()["btn_0_0"] = B("btn_0_0", "안쪽", "icon:star", "url", "example.com", 0, 0)
+w._leave_folder()
+check(w.current_profile.buttons["btn_2_0"].children["btn_0_0"].name == "안쪽", "묶음 안 버튼 유지")
+w.save()
+cfg, profs, cur = st.load_data()
+check(profs[cur].buttons["btn_2_0"].children["btn_0_0"].name == "안쪽", "저장 후 다시 읽기")
+
+check(st.count_outside(w.profiles, 2, 2) > 0, "칸 줄일 때 지워질 버튼 세기")
+p2 = {k: v.copy() for k, v in w.profiles.items()}
+st.prune_outside(p2, 2, 2)
+check(all(x.row < 2 and x.col < 2 for p in p2.values() for x in p.buttons.values()), "칸 줄이기 정리")
+
+# ====================================================================
+section("켜기/끄기 · 길게 누르기 · 큰 버튼 · 정보 버튼")
+btns = w.current_buttons()
+tb = B("btn_0_0", "t", "icon:volume_mute", "url", "a.com", 0, 0, toggle=True)
+btns["btn_0_0"] = tb
+w._rebuild_grid()
+w._handle_click("btn_0_0")
+check(tb.toggle_on, "켜기/끄기: 누르면 켜짐")
+w._handle_click("btn_0_0")
+check(not tb.toggle_on, "켜기/끄기: 다시 누르면 꺼짐")
+wid = w.button_widgets["btn_0_0"]
+check(wid._state_tint(False) == "clear" and wid._state_tint(True) == "mint", "꺼짐=투명, 켜짐=민트")
+
+executed.clear()
+btns["btn_0_1"] = B("btn_0_1", "h", "icon:play", "url", "a.com", 0, 1,
+                    hold_action_type="shortcut", hold_action_data="Ctrl + Z")
+w._rebuild_grid()
+w._handle_long_press("btn_0_1")
+check(executed == [("shortcut", "Ctrl + Z")], "길게 누르면 다른 동작 실행")
+hw = w.button_widgets["btn_0_1"]
+hw._on_hold()
+check(hw._hold_fired, "길게 누르기 확정 후에는 클릭으로 처리 안 함")
+
+btns["btn_1_0"] = B("btn_1_0", "큰 버튼", "icon:star", "url", "a.com", 1, 0, span_cols=2)
+btns["btn_1_1"] = B("btn_1_1", "가려짐", "icon:heart", "url", "b.com", 1, 1)
+w._rebuild_grid()
+big = w.button_widgets["btn_1_0"]
+check(big.width() > big.height() * 1.5, "가로 2칸 버튼 크기")
+check("btn_1_1" not in w.button_widgets and btns["btn_1_1"].name == "가려짐", "가려진 칸은 숨기고 지우지 않음")
+btns["btn_0_2"] = B("btn_0_2", "끝", "icon:star", "url", "a.com", 0, 2, span_cols=2)
+w._rebuild_grid()
+check(w.button_widgets["btn_0_2"].span == (1, 1), "그리드 밖으로 나가는 큰 버튼은 줄임")
+btns["btn_1_0"].span_cols = 1
+w._rebuild_grid()
+check("btn_1_1" in w.button_widgets, "1칸으로 바꾸면 숨었던 버튼 다시 보임")
+
+btns["btn_2_2"] = B("btn_2_2", "", "", "info", "clock", 2, 2)
+w._rebuild_grid()
+info = w.button_widgets["btn_2_2"].info
+check(info is not None and ":" in info[0], f"정보 버튼(시계) 값 표시: {info}")
+
+# ====================================================================
+section("프로필 자동 전환 (프로그램 + 창 제목)")
+from models.profile_model import DeckProfile  # noqa: E402
+w.profiles["p_yt"] = DeckProfile(id="p_yt", name="유튜브", target_process="chrome.exe", target_title="YouTube, 유튜브")
+w.profiles["profile_chrome"].target_process = "chrome.exe"
+check(w.match_profile("chrome.exe", "고양이 영상 - YouTube") == "p_yt", "크롬 + 제목에 YouTube → 유튜브 프로필")
+check(w.match_profile("chrome.exe", "네이버") == "profile_chrome", "크롬 + 다른 제목 → 크롬 프로필")
+check(w.match_profile("notepad.exe", "메모") == "profile_default", "연결 없는 프로그램 → 기본")
+del w.profiles["p_yt"]
+
+# ====================================================================
+section("아이콘 테마 · 변환")
+from ui import icons as IC  # noqa: E402
+check(len(IC.REGISTRY) >= 70, f"테마 아이콘 {len(IC.REGISTRY)}개")
+for p_ in w.profiles.values():
+    p_.buttons["btn_0_0"].icon = "🔥"
+w._convert_emoji_icons()
+check(all(p_.buttons["btn_0_0"].icon == "icon:fire" for p_ in w.profiles.values()), "이모지 → 테마 아이콘 (모든 프로필)")
+w.undo()
+check(all(p_.buttons["btn_0_0"].icon == "🔥" for p_ in w.profiles.values()), "전체 되돌리기")
+
+from ui.button_editor_dialog import ButtonEditorDialog  # noqa: E402
+dlg = ButtonEditorDialog(B("btn_0_0"), parent=w)
+dlg.action.set_value("url", "www.youtube.com/watch")
+rd = dlg.result_data()
+check(rd.name == "Youtube" and rd.icon == "icon:globe", f"자동 이름/아이콘: {rd.name} {rd.icon}")
+dlg._set_icon("icon:heart")
+dlg.action.set_value("folder", "C:/x")
+check(dlg.result_data().icon == "icon:heart", "직접 고른 아이콘은 유지")
+dlg.action.set_value("media", "MicMute")
+dlg._auto_icon()
+check(dlg.result_data().icon == "icon:mic_off", "마이크 음소거 자동 아이콘")
+dlg.span_tabs.setCurrentIndex(1, animate=False)
+check((dlg.result_data().span_cols, dlg.result_data().span_rows) == (2, 1), "편집창: 가로 2칸 저장")
+
+# ====================================================================
+section("설정 · 테마 · 백업")
+old = AppConfig.from_dict({"button_size": 65, "spacing": 6, "glass_blur": 22})
+check(old.spacing == 4 and 0 <= old.glass_clarity <= 100, "예전 설정 간격 자동 변환")
+check(AppConfig.from_dict(old.to_dict()).spacing == 4, "두 번 변환하지 않음")
+
+from services.storage_service import BUILTIN_THEMES  # noqa: E402
+c = w.config.copy()
+c.apply_theme_dict(BUILTIN_THEMES["밤 유리"])
+w.apply_config(c)
+app.processEvents()
+check(theme.T().dark and w.config.bg_type == "glass", "덱 테마 적용 (밤 유리)")
+c = w.config.copy()
+c.apply_theme_dict(BUILTIN_THEMES["투명 (버튼만)"])
+w.apply_config(c)
+check(w.config.bg_type == "clear", "투명 (버튼만) 전환 (오류 없음)")
+w.panel.rebuild_background()
+_bg = w.panel.backdrop_pixmap()
+check(not w.grabber.enabled and _bg is not None and _bg.toImage().pixelColor(5, 5).alpha() == 0,
+      "투명 (버튼만): 화면 캡처 안 함 + 판 배경 투명")
+check(not w.act_capture.isVisible(), "투명 (버튼만): '캡처할 때 보이게' 숨김")
+c = w.config.copy()
+c.apply_theme_dict(BUILTIN_THEMES["맑은 유리"])
+w.apply_config(c)
+
+ok, _ = st.export_theme("t", w.config.theme_dict(), os.path.join(TMP, "t.vdtheme.json"))
+name, th = st.import_theme(os.path.join(TMP, "t.vdtheme.json"))
+check(ok and name == "t" and th["bg_type"] == "glass", "테마 내보내기/가져오기")
+
+w.save()
+backups = st.list_backups()
+check(len(backups) >= 1, f"자동 백업 생성 ({len(backups)}개)")
+check(st.load_file(backups[0][0]) is not None, "백업 파일 읽기")
+
+with open(st.file_path, "w") as f:
+    f.write("{broken")
+check(len(st.load_data()[1]) >= 1, "설정 파일이 깨지면 .bak 사용")
+
+# ====================================================================
+section("매크로")
+from core.macro_manager import MacroRunner  # noqa: E402
+r = MacroRunner.instance()
+fin = []
+r.finished.connect(lambda k, ok, m: fin.append((k, ok, m)))
+ok, _ = r.run("k1", json.dumps([{"type": "delay", "value": "3000"}]))
+check(ok and r.is_running("k1"), "매크로 시작")
+r.stop("k1")
+t0 = time.time()
+while not fin and time.time() - t0 < 2:
+    app.processEvents()
+    time.sleep(0.01)
+check(fin and not fin[0][1], f"실행 중 다시 누르면 멈춤 {fin}")
+
+from ui.macro_editor_dialog import MacroRecorder  # noqa: E402
+rec = MacroRecorder()
+rec.record_delays = False
+rec.start()
+for ch in "hi":
+    rec.keyPressEvent(QKeyEvent(QEvent.KeyPress, ord(ch.upper()), Qt.NoModifier, ch))
+rec.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_S, Qt.ControlModifier, "\x13"))
+rec.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier, "\r"))
+steps = rec.stop()
+check(steps == [{"type": "text", "value": "hi"}, {"type": "shortcut", "value": "Ctrl + S"},
+                {"type": "shortcut", "value": "Enter"}], f"매크로 녹화: {steps}")
+
+# ====================================================================
+section("타이머 · 스톱워치")
+from core.timer_manager import TimerManager, dump_timer, parse_timer, format_seconds  # noqa: E402
+check(format_seconds(125) == "02:05" and format_seconds(3725) == "1:02:05", "시간 표시 형식")
+tm = TimerManager()
+cd = dump_timer({"mode": "countdown", "seconds": 1, "sound": False})
+done = []
+tm.finished.connect(done.append)
+check(tm.view("t1", cd)[0] == "00:01" and tm.view("t1", cd)[3] == "idle", "처음에는 설정한 시간 표시")
+check(tm.press("t1") == "running", "누르면 시작")
+check(tm.press("t1") == "paused", "다시 누르면 일시정지")
+paused_view = tm.view("t1", cd)
+time.sleep(0.3)
+check(tm.view("t1", cd)[0] == paused_view[0], "일시정지 중에는 시간이 멈춤")
+tm.press("t1")
+time.sleep(1.1)
+tm.tick(lambda k: cd)
+check(done == ["t1"] and tm.view("t1", cd)[0] == "끝!", "시간이 다 되면 끝 알림")
+check(tm.press("t1") == "idle", "끝난 뒤 누르면 처음으로")
+sw = dump_timer({"mode": "stopwatch"})
+tm.press("s1")
+time.sleep(1.05)
+check(tm.view("s1", sw)[0] == "00:01", "스톱워치는 올라감")
+tm.reset("s1")
+check(tm.view("s1", sw)[3] == "idle", "초기화")
+
+btns = w.current_buttons()
+btns["btn_2_1"] = B("btn_2_1", "라면", "icon:timer", "timer", dump_timer({"seconds": 180, "sound": False}), 2, 1)
+w._rebuild_grid()
+w._handle_click("btn_2_1")
+w._on_live_tick()
+view = w.button_widgets["btn_2_1"].timer_view
+check(view and view[3] == "running" and view[0] in ("03:00", "02:59"), f"덱 타이머 버튼 시작: {view}")
+check(w.live_timer.interval() == 250, "타이머가 돌 때는 화면을 자주 새로 그림")
+w._handle_long_press("btn_2_1")
+check(w.button_widgets["btn_2_1"].timer_view[3] == "idle", "길게 누르면 타이머 처음으로")
+dlg = ButtonEditorDialog(btns["btn_2_1"].clone(), parent=w)
+page = dlg.action.pages["timer"]
+check(page.minutes.value() == 3 and page.seconds.value() == 0, "편집창에 타이머 시간 불러오기")
+dlg._set_timer_seconds = dlg.action._set_timer_seconds
+dlg.action._set_timer_seconds(page, 1500)
+cfg_t = parse_timer(dlg.result_data().action_data)
+check(cfg_t["seconds"] == 1500 and cfg_t["mode"] == "countdown", "편집창에서 25분으로 바꾸기")
+
+section("추가 부품(pycaw)")
+from core import dependencies as dep  # noqa: E402
+check(isinstance(dep.has_pycaw(), bool), f"pycaw 확인 (있음: {dep.has_pycaw()}, 설치 가능: {dep.can_install()})")
+
+# ====================================================================
+section("설치판 / 휴대용 저장 위치")
+fake_exe_dir = os.path.join(TMP, "fake_install")
+os.makedirs(fake_exe_dir, exist_ok=True)
+saved = (getattr(sys, "frozen", None), sys.executable, os.environ.pop("VIRTUALDECK_DATA_DIR"), os.environ.get("APPDATA"))
+try:
+    sys.frozen = True
+    sys.executable = os.path.join(fake_exe_dir, "VirtualDeck.exe")
+    os.environ["APPDATA"] = os.path.join(TMP, "fake_appdata")
+    check(not paths.is_installed() and paths.data_dir() == os.path.join(fake_exe_dir, "data"),
+          "휴대용: 프로그램 옆 data 폴더에 저장")
+    open(os.path.join(fake_exe_dir, "installed.txt"), "w").close()
+    check(paths.is_installed() and paths.data_dir() == os.path.join(TMP, "fake_appdata", "VirtualDeck"),
+          "설치판: 사용자 폴더(APPDATA)에 저장")
+    check(paths.cache_dir().startswith(paths.data_dir()), "임시 파일도 데이터 폴더 안에 (삭제 시 함께 지워짐)")
+finally:
+    if saved[0] is None:
+        del sys.frozen
+    sys.executable = saved[1]
+    os.environ["VIRTUALDECK_DATA_DIR"] = saved[2]
+    if saved[3] is None:
+        os.environ.pop("APPDATA", None)
+    else:
+        os.environ["APPDATA"] = saved[3]
+
+# ====================================================================
+# ====================================================================
+section("기타")
+check(paths.resolve_icon(r"C:\옛날폴더\Virtual Deck\data\icons\없는파일.png") is None, "없는 아이콘은 None")
+avail = app.primaryScreen().availableGeometry()
+pnt = w._snapped(QPoint(avail.left() - w.panel.x() + 10, 300))
+check(pnt.x() + w.panel.x() == avail.left() + 6, "화면 가장자리에 붙기")
+
+# ====================================================================
+section("위쪽 메뉴 및 여백")
+w.config.always_show_header = False
+w._update_header()
+check(not w.header_bar.isVisible() or w.header_effect.opacity() == 0.0, "처음엔 위쪽 메뉴 숨김")
+
+w.enterEvent(None)
+wait(200)
+app.processEvents()
+check(w.header_bar.isVisible() and w.header_effect.opacity() > 0.0, "enterEvent 뒤에 메뉴 보임")
+
+w.config.always_show_header = True
+w.apply_config(w.config)
+app.processEvents()
+check(w.header_bar.isVisible() and w.header_effect.opacity() == 1.0, "always_show_header=True 면 항상 보임")
+
+w.config.button_size = 64
+w.config.spacing = 4
+w.config.rows, w.config.cols = 3, 3
+w._adjust_size()
+pad = max(6, round(64 * 0.09))
+expected_panel_w = 3 * 64 + 2 * 4 + 2 * pad
+check(w.panel.width() == expected_panel_w, f"SS 3x3 버튼판 너비 ({w.panel.width()} == {expected_panel_w})")
+
+# ====================================================================
+section("모달 없는 대화상자 (환경설정·버튼 설정)")
+from ui.widgets import GlassDialog
+gd = GlassDialog("테스트 모달리스", modeless=True)
+check(not gd.isModal(), "GlassDialog(modeless=True) 는 모달이 아님")
+gd.close()
+
+# 환경설정 창 열기
+w._open_settings()
+check(w._settings_dlg is not None and w._settings_dlg.isVisible(), "환경설정 창 열림")
+check(not w._settings_dlg.isModal(), "환경설정 창은 모달이 아님")
+old_sd = w._settings_dlg
+w._open_settings()
+check(w._settings_dlg is old_sd, "다시 열어도 창은 하나만 유지")
+w._settings_dlg.reject()
+check(w._settings_dlg is None, "취소 시 설정 창 정리됨")
+
+# 버튼 설정 창 열기 및 다른 버튼 전환
+w._edit_button("btn_0_0")
+check(w._editor_dlg is not None and w._editor_dlg.isVisible(), "버튼 설정 창 열림")
+check(not w._editor_dlg.isModal(), "버튼 설정 창은 모달이 아님")
+check(w._editor_dlg.data.id == "btn_0_0", "편집 중인 버튼 ID 확인")
+
+# 내용 변경 없이 다른 버튼 편집 시 바로 전환
+w._edit_button("btn_0_1")
+check(w._editor_dlg.data.id == "btn_0_1", "다른 버튼으로 내용 전환됨")
+
+# 버튼 위치 바꾸기 시 편집 대상 ID 동기화
+w._swap_buttons("btn_0_1", "btn_0_2")
+check(w._editor_dlg.data.id == "btn_0_2", "버튼 교체 시 편집 창 대상 ID 동기화됨")
+
+# 5단계 테스트: 켜기/끄기 스위치와 "켜진 상태에서 할 일" 연동
+w._editor_dlg.toggle.setChecked(False)
+app.processEvents()
+check(not w._editor_dlg.off_box.isVisible(), "스위치 끄면 '켜진 상태에서 할 일' 숨겨짐")
+w._editor_dlg.toggle.setChecked(True)
+app.processEvents()
+check(w._editor_dlg.off_box.isVisible(), "스위치 켜면 '켜진 상태에서 할 일' 보임")
+
+w._editor_dlg.reject()
+check(w._editor_dlg is None, "취소 시 편집 창 정리됨")
+
+# ====================================================================
+section("환경설정 개편 및 7개 스타일")
+from services.storage_service import BUILTIN_THEMES, get_builtin_theme
+expected_styles = ["맑음", "밤", "젖빛", "하늘", "노을", "숲", "투명 (버튼만)"]
+check(all(s in BUILTIN_THEMES for s in expected_styles), f"스타일 7개 이름이 BUILTIN_THEMES 에 있음 ({list(BUILTIN_THEMES.keys())})")
+
+legacy_sea = get_builtin_theme("깊은 바다")
+check(legacy_sea is not None, "예전 이름 '깊은 바다' 로 불러와도 오류 없음")
+
+sky_style = BUILTIN_THEMES.get("하늘", {})
+check(bool(sky_style.get("glass_tint")), "하늘 스타일 적용 시 glass_tint 가 비어 있지 않음")
+
+# 환경설정 창 열기 및 탭 4개 확인
+w._open_settings()
+sd = w._settings_dlg
+check(sd is not None and len(sd.tabs.labels) == 4, f"환경설정 탭이 4개 ({sd.tabs.labels if sd else []})")
+sd.reject()
+
+# ====================================================================
+section("일상 용어 검사 (덱 → 버튼판 등)")
+from core.action_executor import ACTION_LABELS
+check("버튼판" in w.act_toggle.text() and "덱" not in w.act_toggle.text(), f"트레이 메뉴 토글 문구 검사: {w.act_toggle.text()}")
+check(ACTION_LABELS["none"] == "아무것도 안 함", f"ACTION_LABELS none 검사: {ACTION_LABELS['none']}")
+check(ACTION_LABELS["macro"] == "연속 동작", f"ACTION_LABELS macro 검사: {ACTION_LABELS['macro']}")
+check(ACTION_LABELS["group"] == "버튼 묶음", f"ACTION_LABELS group 검사: {ACTION_LABELS['group']}")
+check("정보 보여 주기" in ACTION_LABELS["info"], f"ACTION_LABELS info 검사: {ACTION_LABELS['info']}")
+
+# ====================================================================
+section("6차 종합 검증")
+# 1. system -> clear 자동 변환
+sys_cfg = AppConfig.from_dict({"bg_type": "system"})
+check(sys_cfg.bg_type == "clear", f"system 모드가 clear 로 변환됨 ({sys_cfg.bg_type})")
+
+# 2. 스타일 바꾸기 시간 < 0.2초
+import time
+t0 = time.perf_counter()
+w.apply_config(w.config)
+app.processEvents()
+dt = time.perf_counter() - t0
+check(dt < 0.2, f"스타일 바꾸기 시간 0.2초 이내 ({dt*1000:.1f}ms)")
+
+# 3. 화면 캡처 그림이 있을 때 색 유리(하늘/노을/숲) 오류 없이 그려지는지 확인
+from ui.backdrop import compose_background
+from PySide6.QtCore import QSize
+from PySide6.QtGui import QPixmap
+g = QPixmap(400, 400)
+g.fill()
+for tint_name in ("sky", "sunset", "forest"):
+    tint_cfg = AppConfig.from_dict({"bg_type": "glass", "glass_tint": tint_name})
+    res_pm = compose_background(tint_cfg, QSize(200, 200), 1.0, g, QPointF(0, 0))
+    check(isinstance(res_pm, QPixmap) and not res_pm.isNull(), f"색 유리({tint_name}) 화면 캡처 시 배경 합성 성공")
+
+
+passed = sum(results)
+print(f"\n결과: {passed} / {len(results)} 통과")
+w.hotkey.unregister()
+import shutil  # noqa: E402
+shutil.rmtree(TMP, ignore_errors=True)   # 테스트용 임시 폴더도 남기지 않음
+sys.exit(0 if passed == len(results) else 1)

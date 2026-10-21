@@ -1,0 +1,2 @@
+이 파일이 있으면 Virtual Deck 이 설치판으로 동작합니다. (설정은 %APPDATA%\VirtualDeck 에 저장)
+지우지 마세요.
