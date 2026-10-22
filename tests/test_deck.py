@@ -36,6 +36,7 @@ import core.system_integration as SI  # noqa: E402
 from core import paths  # noqa: E402
 from core.shortcut_manager import ShortcutManager as SM  # noqa: E402
 from models.button_model import DeckButtonData as B  # noqa: E402
+from models.button_model import DeckButtonData  # noqa: E402
 from models.config_model import AppConfig  # noqa: E402
 from services.storage_service import StorageService  # noqa: E402
 
@@ -134,9 +135,10 @@ w._rebuild_grid()
 big = w.button_widgets["btn_1_0"]
 check(big.width() > big.height() * 1.5, "가로 2칸 버튼 크기")
 check("btn_1_1" not in w.button_widgets and btns["btn_1_1"].name == "가려짐", "가려진 칸은 숨기고 지우지 않음")
-btns["btn_0_2"] = B("btn_0_2", "끝", "icon:star", "url", "a.com", 0, 2, span_cols=2)
+_last = B.make_id(0, w.config.cols - 1)
+btns[_last] = B(_last, "끝", "icon:star", "url", "a.com", 0, w.config.cols - 1, span_cols=2)
 w._rebuild_grid()
-check(w.button_widgets["btn_0_2"].span == (1, 1), "그리드 밖으로 나가는 큰 버튼은 줄임")
+check(w.button_widgets[_last].span == (1, 1), "그리드 밖으로 나가는 큰 버튼은 줄임")
 btns["btn_1_0"].span_cols = 1
 w._rebuild_grid()
 check("btn_1_1" in w.button_widgets, "1칸으로 바꾸면 숨었던 버튼 다시 보임")
@@ -150,9 +152,10 @@ check(info is not None and ":" in info[0], f"정보 버튼(시계) 값 표시: {
 section("프로필 자동 전환 (프로그램 + 창 제목)")
 from models.profile_model import DeckProfile  # noqa: E402
 w.profiles["p_yt"] = DeckProfile(id="p_yt", name="유튜브", target_process="chrome.exe", target_title="YouTube, 유튜브")
-w.profiles["profile_chrome"].target_process = "chrome.exe"
+b_pid = "profile_browser" if "profile_browser" in w.profiles else "profile_chrome"
+w.profiles[b_pid].target_process = "chrome.exe"
 check(w.match_profile("chrome.exe", "고양이 영상 - YouTube") == "p_yt", "크롬 + 제목에 YouTube → 유튜브 프로필")
-check(w.match_profile("chrome.exe", "네이버") == "profile_chrome", "크롬 + 다른 제목 → 크롬 프로필")
+check(w.match_profile("chrome.exe", "네이버") == b_pid, "크롬 + 다른 제목 → 브라우저 프로필")
 check(w.match_profile("notepad.exe", "메모") == "profile_default", "연결 없는 프로그램 → 기본")
 del w.profiles["p_yt"]
 
@@ -461,17 +464,17 @@ test_cb.clearFocus()
 # 휠을 아래로 굴리는 이벤트 생성
 we = QWheelEvent(QPointF(10, 10), QPointF(10, 10), QPoint(0, 0), QPoint(0, -120), Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
 app.sendEvent(test_cb, we)
-check(test_cb.currentIndex() == 0, f"포커스 없는 콤보에 휠 이벤트를 보내도 currentIndex 그대로 ({test_cb.currentIndex()})")
+check(test_cb.currentIndex() == 0, "포커스 없는 드롭다운은 휠로 안 바뀜")
 
 # ====================================================================
 section("F: 켜기/끄기 실제 프로그램·폴더 상태 연동")
 from core import running_state
-from models.button_model import DeckButtonData
 
 w.config.sync_toggle_state = True
 w.show()
-p_btn = DeckButtonData(id="btn_0_0", row=0, col=0, name="테스트앱", action_type="program", action_data="notepad.exe", toggle=True, toggle_on=False)
-w.current_buttons()["btn_0_0"] = p_btn
+p_id = DeckButtonData.make_id(0, 0)
+p_btn = DeckButtonData(id=p_id, row=0, col=0, name="테스트앱", action_type="program", action_data="notepad.exe", toggle=True, toggle_on=False)
+w.current_buttons()[p_id] = p_btn
 w._rebuild_grid()
 
 # 1. 실제 상태 True -> 다음 tick에 toggle_on True
@@ -499,17 +502,18 @@ running_state.close_program_windows = lambda cmd: (close_called.append(cmd), 1)[
 p_btn.toggle_on = True
 p_btn.off_action_type = "none"
 p_btn.off_action_data = ""
-w._handle_click("btn_0_0")
+w._handle_click(p_id)
 check(len(close_called) == 1 and close_called[0] == "notepad.exe", f"켜진 상태에서 누르면 close 호출됨 ({close_called})")
 check(p_btn.toggle_on is False, f"close 호출 후 toggle_on False로 변경됨 ({p_btn.toggle_on})")
 
 # 5. 단축키 버튼은 누를 때마다 뒤집힘
-sc_btn = DeckButtonData(id="btn_0_1", row=0, col=1, name="단축키", action_type="shortcut", action_data="Ctrl + S", toggle=True, toggle_on=False)
-w.current_buttons()["btn_0_1"] = sc_btn
+sc_id = DeckButtonData.make_id(0, 1)
+sc_btn = DeckButtonData(id=sc_id, row=0, col=1, name="단축키", action_type="shortcut", action_data="Ctrl + S", toggle=True, toggle_on=False)
+w.current_buttons()[sc_id] = sc_btn
 w._rebuild_grid()
-w._handle_click("btn_0_1")
+w._handle_click(sc_id)
 check(sc_btn.toggle_on is True, f"단축키 버튼 1회 클릭 시 True ({sc_btn.toggle_on})")
-w._handle_click("btn_0_1")
+w._handle_click(sc_id)
 check(sc_btn.toggle_on is False, f"단축키 버튼 2회 클릭 시 False ({sc_btn.toggle_on})")
 
 
@@ -547,6 +551,164 @@ for tint_name in ("sky", "sunset", "forest"):
     res_pm = compose_background(tint_cfg, QSize(200, 200), 1.0, g, QPointF(0, 0))
     check(isinstance(res_pm, QPixmap) and not res_pm.isNull(), f"색 유리({tint_name}) 화면 캡처 시 배경 합성 성공")
 
+# ====================================================================
+section("L5: 버튼 설정 창 및 환경설정 창 잘림/넘침 검사")
+from PySide6.QtWidgets import QWidget, QScrollArea
+from ui.button_editor_dialog import ButtonEditorDialog
+from ui.settings_dialog import SettingsDialog
+
+# 1. 버튼 설정 창 가로 760, 820, 900
+test_b_data = DeckButtonData(id="btn_0_0", row=0, col=0, name="테스트버튼")
+dlg = ButtonEditorDialog(test_b_data, parent=w, modeless=True)
+
+for target_w in (760, 820, 900):
+    dlg.resize(target_w, 650)
+    dlg.show()
+    app.processEvents()
+    for sc, content, side_name in [(dlg.left_scroll, dlg.left_content, "왼쪽"), (dlg.right_scroll, dlg.right_content, "오른쪽")]:
+        vp = sc.viewport()
+        vp_w = vp.width()
+        for child in content.findChildren(QWidget):
+            if child.isVisible() and child.width() > 0:
+                right_pt = child.mapTo(vp, QPoint(child.width(), 0))
+                right_x = right_pt.x()
+                overflow = right_x - (vp_w + 1)
+                text = ""
+                if hasattr(child, "text") and callable(child.text):
+                    try:
+                        text = child.text()
+                    except Exception:
+                        pass
+                check(overflow <= 0,
+                      f"버튼설정창({target_w}px {side_name}) {child.__class__.__name__}"
+                      f"{f'({text[:15]})' if text else ''} 넘침 없음 (overflow={overflow}px, right={right_x}, vp={vp_w})")
+
+dlg.close()
+
+# 2. 환경설정 창 가로 720, 860 (4개 탭)
+sd = SettingsDialog(w.config, parent=w, modeless=True)
+for target_w in (720, 860):
+    sd.resize(target_w, 620)
+    sd.show()
+    app.processEvents()
+    for tab_idx in range(4):
+        sd.tabs.setCurrentIndex(tab_idx, animate=False)
+        sd.stack.setCurrentIndex(tab_idx)
+        app.processEvents()
+        page_widget = sd.stack.widget(tab_idx)  # QScrollArea
+        if isinstance(page_widget, QScrollArea):
+            vp = page_widget.viewport()
+            vp_w = vp.width()
+            content = page_widget.widget()
+            for child in content.findChildren(QWidget):
+                if child.isVisible() and child.width() > 0:
+                    right_pt = child.mapTo(vp, QPoint(child.width(), 0))
+                    right_x = right_pt.x()
+                    overflow = right_x - (vp_w + 1)
+                    text = ""
+                    if hasattr(child, "text") and callable(child.text):
+                        try:
+                            text = child.text()
+                        except Exception:
+                            pass
+                    check(overflow <= 0,
+                          f"환경설정창({target_w}px 탭{tab_idx}) {child.__class__.__name__}"
+                          f"{f'({text[:15]})' if text else ''} 넘침 없음 (overflow={overflow}px, right={right_x}, vp={vp_w})")
+
+sd.close()
+
+# ====================================================================
+section("P4: 한국 사용자용 프로필 예시 모음 검증")
+from services.sample_profiles import SAMPLES, create_sample_profile
+from core.timer_manager import parse_timer
+
+# 1. 모든 예시 생성 및 기본 속성 검증
+check(len(SAMPLES) == 9, f"예시 프로필 총 9개 정의됨 ({len(SAMPLES)})")
+
+all_sample_profiles = [create_sample_profile(s) for s in SAMPLES]
+check(len(all_sample_profiles) == 9, "모든 예시 프로필 인스턴스 생성 성공")
+
+# 2. 모든 버튼의 아이콘이 REGISTRY에 존재하는지 확인
+all_buttons = []
+for p in all_sample_profiles:
+    for btn in p.buttons.values():
+        all_buttons.append(btn)
+        if btn.children:
+            all_buttons.extend(btn.children.values())
+
+valid_icons = True
+invalid_icon_names = []
+for b in all_buttons:
+    if b.icon.startswith("icon:"):
+        iname = b.icon[5:]
+        if iname not in IC.REGISTRY:
+            valid_icons = False
+            invalid_icon_names.append(iname)
+
+check(valid_icons and len(invalid_icon_names) == 0,
+      f"모든 예시 버튼의 테마 아이콘이 REGISTRY에 존재함 (잘못된 아이콘: {invalid_icon_names})")
+
+# 3. 모든 단축키를 ShortcutManager.parse가 정상 해석하는지 검증
+valid_shortcuts = True
+failed_shortcuts = []
+for b in all_buttons:
+    if b.action_type == "shortcut":
+        codes, err = SM.parse(b.action_data)
+        if not codes or err:
+            valid_shortcuts = False
+            failed_shortcuts.append((b.name, b.action_data, err))
+
+check(valid_shortcuts, f"모든 단축키 문자열이 정상 해석됨 (실패: {failed_shortcuts})")
+
+# 4. 모든 timer가 parse_timer로 읽히는지 검증
+valid_timers = True
+failed_timers = []
+for b in all_buttons:
+    if b.action_type == "timer":
+        t = parse_timer(b.action_data)
+        if t["mode"] not in ("countdown", "stopwatch") or t["seconds"] <= 0:
+            valid_timers = False
+            failed_timers.append((b.name, b.action_data))
+
+check(valid_timers, f"모든 타이머 데이터가 parse_timer로 정상 해석됨 (실패: {failed_timers})")
+
+# 5. 다중 target_process 매칭 검증 (대소문자 무시, whale.exe, MSEDGE.EXE)
+w.profiles["profile_browser"] = all_sample_profiles[2]  # 인터넷 프로필
+check(w.match_profile("whale.exe", "") == "profile_browser", "whale.exe 자동 매칭 성공")
+check(w.match_profile("MSEDGE.EXE", "") == "profile_browser", "대문자 MSEDGE.EXE 자동 매칭 성공")
+check(w.match_profile("chrome.exe", "") == "profile_browser", "chrome.exe 자동 매칭 성공")
+
+# 6. 빈 데이터 폴더 테스트: 프로필 3개, 기본 3x4, 더보기 안 8개
+import tempfile
+import shutil
+empty_tmp = tempfile.mkdtemp(prefix="vdeck_empty_test_")
+empty_storage = StorageService(data_dir=empty_tmp)
+c_empty, p_empty, cur_empty = empty_storage.load_data()
+
+check(len(p_empty) == 3, f"빈 데이터 폴더 로드 시 프로필 3개 생성됨 ({list(p_empty.keys())})")
+check(c_empty.rows == 3 and c_empty.cols == 4, f"기본 그리드 크기가 3행 4열임 ({c_empty.rows}x{c_empty.cols})")
+def_p = p_empty.get("profile_default")
+more_btn = def_p.buttons.get(DeckButtonData.make_id(2, 3)) if def_p else None
+more_count = len([b for b in more_btn.children.values() if not b.is_empty()]) if (more_btn and more_btn.children) else 0
+check(more_count == 7, f"더보기 버튼 안의 자식 버튼 개수가 7개임 ({more_count}개)")
+shutil.rmtree(empty_tmp, ignore_errors=True)
+
+# 7. 기존 프로필 + 예시 2개 추가 테스트 (이름 중복 시 '(예시)' 추가 및 ensure_grid 보존)
+from ui.profile_manager_dialog import ProfileManagerDialog, SampleProfilesDialog
+pm = ProfileManagerDialog({k: v.copy() for k, v in w.profiles.items()}, w.current_profile_id, w.storage, parent=w)
+sp_dlg = SampleProfilesDialog(pm, parent=w)
+# '한글', '기본' 2개 체크
+for cb, item in sp_dlg.checkboxes:
+    if item["key"] in ("default", "hwp"):
+        cb.setChecked(True)
+
+orig_count = len(pm.profiles)
+sp_dlg._add_selected()
+check(len(pm.profiles) == orig_count + 2, f"예시 2개 추가 성공 (총 {len(pm.profiles)}개)")
+names = [p.name for p in pm.profiles.values()]
+check("기본 (예시)" in names, f"중복된 '기본' 이름이 '기본 (예시)'로 생성됨 ({names})")
+check("한글" in names, f"새로운 '한글' 예시가 정상 추가됨 ({names})")
+pm.close()
 
 passed = sum(results)
 print(f"\n결과: {passed} / {len(results)} 통과")

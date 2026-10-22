@@ -401,15 +401,28 @@ class ColorChips(QWidget):
         self.setCursor(Qt.PointingHandCursor)
         self.chip = 30
         self.gap = 10
-        self.setFixedHeight(self.chip + 12)
-        self.setMinimumWidth(len(self.keys) * (self.chip + self.gap))
+        self.cols = max(4, len(self.keys))
+        self.setMinimumWidth(4 * (self.chip + self.gap))
+        self._update_layout()
+
+    def _update_layout(self):
+        rows = (len(self.keys) + self.cols - 1) // self.cols
+        self.setFixedHeight(rows * (self.chip + self.gap) + 8)
+
+    def resizeEvent(self, e):
+        new_cols = max(4, (self.width() - 8) // (self.chip + self.gap))
+        if new_cols != self.cols:
+            self.cols = new_cols
+            self._update_layout()
+        super().resizeEvent(e)
 
     def set_current(self, key: str):
         self.current = key if key in self.keys else self.keys[0]
         self.update()
 
     def _rect(self, i) -> QRectF:
-        return QRectF(4 + i * (self.chip + self.gap), 4, self.chip, self.chip)
+        r, c = divmod(i, self.cols)
+        return QRectF(4 + c * (self.chip + self.gap), 4 + r * (self.chip + self.gap), self.chip, self.chip)
 
     def _index_at(self, pos) -> int:
         for i in range(len(self.keys)):

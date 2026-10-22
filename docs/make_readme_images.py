@@ -48,22 +48,11 @@ from models.profile_model import DeckProfile
 
 
 def setup_sample_storage():
-    """예쁜 샘플 버튼 3x3 설정"""
-    cfg = AppConfig(rows=3, cols=3, button_size=74, spacing=5, bg_type="glass", glass_tint="sky", glass_clarity=25)
+    """새 기본 3x4 프로필 설정"""
+    cfg = AppConfig(rows=3, cols=4, button_size=74, spacing=5, bg_type="glass", glass_tint="sky", glass_clarity=25)
     storage = StorageService()
-    
-    sample_buttons = {
-        "btn_0_0": DeckButtonData(id="btn_0_0", name="볼륨 +", action_type="shortcut", action_data="VolumeUp", icon="icon:volume_up", icon_color="mint"),
-        "btn_0_1": DeckButtonData(id="btn_0_1", name="볼륨 -", action_type="shortcut", action_data="VolumeDown", icon="icon:volume_down", icon_color="mint"),
-        "btn_0_2": DeckButtonData(id="btn_0_2", name="음소거", action_type="shortcut", action_data="VolumeMute", icon="icon:volume_mute", icon_color="sky"),
-        "btn_1_0": DeckButtonData(id="btn_1_0", name="화면 캡처", action_type="shortcut", action_data="Win + Shift + S", icon="icon:camera", icon_color="sunset"),
-        "btn_1_1": DeckButtonData(id="btn_1_1", name="메모장", action_type="program", action_data="notepad.exe", icon="icon:edit", icon_color="yellow"),
-        "btn_1_2": DeckButtonData(id="btn_1_2", name="유튜브", action_type="url", action_data="https://youtube.com", icon="icon:video", icon_color="pink"),
-        "btn_2_0": DeckButtonData(id="btn_2_0", name="계산기", action_type="program", action_data="calc.exe", icon="icon:grid", icon_color="white"),
-        "btn_2_1": DeckButtonData(id="btn_2_1", name="타이머", action_type="timer", action_data="03:00", icon="icon:clock", icon_color="orange"),
-        "btn_2_2": DeckButtonData(id="btn_2_2", name="전체화면", action_type="shortcut", action_data="F11", icon="icon:window", icon_color="purple"),
-    }
-    prof = DeckProfile(id="profile_default", name="기본", buttons=sample_buttons)
+    from services.sample_profiles import SAMPLES, create_sample_profile
+    prof = create_sample_profile(SAMPLES[0], "profile_default")
     storage.save_data(cfg, {"profile_default": prof}, "profile_default")
     return cfg, storage
 
@@ -220,7 +209,7 @@ def make_settings_and_editor_images():
 
     # 환경설정 창
     sd = SettingsDialog(w.config.copy(), storage=w.storage, parent=w)
-    sd.resize(720, 560)
+    sd.resize(820, 580)
     sd.show()
     app.processEvents()
     sd_pix = sd.grab()
@@ -229,16 +218,14 @@ def make_settings_and_editor_images():
     print(f"      settings.png 저장 완료: {sd_path}")
     sd.close()
 
-    # 버튼 편집 창
+    # 버튼 편집 창 (820px)
     btn_data = DeckButtonData(id="0,0", name="화면 캡처", action_type="shortcut", action_data="Win + Shift + S", icon="icon:camera", icon_color="sunset")
     ed = ButtonEditorDialog(btn_data, in_folder=False, parent=w)
-    ed.resize(600, 560)
+    ed.resize(820, 620)
     ed.show()
     app.processEvents()
     ed_pix = ed.grab()
     ed_path = os.path.join(IMAGES_DIR, "editor.png")
-    ed_pix.save(ed_path, "PNG")
-    print(f"      editor.png 저장 완료: {ed_path}")
     ed.close()
     w.close()
 

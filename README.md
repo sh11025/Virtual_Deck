@@ -7,11 +7,11 @@
 **화면 위에 띄워 두는 나만의 투명 유리 버튼판**
 
 <p>
-  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.3-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.3-blue.svg?style=flat-square" alt="버전 1.6.3" /></a>
+  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.4-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.4-blue.svg?style=flat-square" alt="버전 1.6.4" /></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6.svg?style=flat-square&logo=windows" alt="Windows 10/11" />
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/GUI-PySide6%20(Qt6)-41CD52.svg?style=flat-square&logo=qt" alt="PySide6" />
-  <img src="https://img.shields.io/badge/tests-100%2F100%20pass-brightgreen.svg?style=flat-square" alt="테스트 100/100 통과" />
+  <img src="https://img.shields.io/badge/tests-420%2F420%20pass-brightgreen.svg?style=flat-square" alt="테스트 420/420 통과" />
 </p>
 
 <br/>
@@ -31,13 +31,21 @@
 > 이 프로그램은 키보드를 대신 눌러 주는 방식이라, 게임 보안 프로그램이 매크로로 오해할 수 있어요.
 > 게임 계정이 제한될 수 있으니 게임 중에는 꺼 두세요.
 
+## 💡 왜 만들었나요?
+
+스트림 덱처럼 버튼 하나로 프로그램을 열고 단축키를 누르는 도구를 컴퓨터 화면에서도 쓸 수 있다고 해서 찾아봤어요. 그런데 유료 기능이 있고 디자인도 제 취향이 아니어서, "그럼 내 방식대로 만들어 보자" 라는 생각으로 시작했어요.
+
+무료로, 화면 위에 예쁘게 떠 있고, 처음 쓰는 사람도 쉽게 쓸 수 있는 버튼판을 목표로 만들었어요.
+
+<sub>Virtual Deck 은 Elgato 및 Stream Deck 과 관련 없는 개인 프로젝트예요.</sub>
+
 ---
 
 ## 🚀 다운로드 (바로 설치하고 쓰기)
 
 | 종류 | 파일 이름 | 크기 | 설명 | 다운로드 |
 |---|---|---|---|---|
-| **설치 파일 (추천)** | `VirtualDeck-1.6.3-Setup.exe` | **38.4 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.3-Setup.exe) |
+| **설치 파일 (추천)** | `VirtualDeck-1.6.4-Setup.exe` | **38.4 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.4-Setup.exe) |
 
 
 > [!TIP]
@@ -52,6 +60,21 @@
 1. **설치 후 실행**: 다운로드한 설치 파일을 실행하면 바탕화면에 투명한 유리 버튼판이 나타납니다.
 2. **버튼 우클릭 → 편집**: 아무 버튼이나 마우스 오른쪽 버튼으로 누르고 **`편집`** 을 누릅니다.
 3. **할 일 고르고 저장**: 단축키나 자주 쓰는 프로그램을 고르고 **`저장`** 하면 즉시 나만의 전용 버튼이 완성됩니다!
+
+### 🎁 바로 쓸 수 있는 프로필 예시 모음
+자주 쓰는 프로그램과 일상 작업에 맞춘 9가지 예시 프로필이 준비되어 있어, 따로 설정하지 않고 바로 쓸 수 있어요.
+
+| 프로필 이름 | 들어 있는 버튼 | 자동으로 바뀌는 프로그램 |
+|---|---|---|
+| **기본** | 네이버, 유튜브, 화면 캡처, 계산기, 탐색기, 다운로드, 바탕화면, 재생/정지, 볼륨 -, 음소거, 볼륨 +, 더보기 | 기본 버튼판 |
+| **공부·집중** | 집중 25분, 쉬기 5분, 스톱워치, 시계, 유튜브, 재생/정지, 음소거 | - |
+| **인터넷** | 뒤로, 새로고침, 앞으로, 새 탭, 탭 닫기, 닫은 탭 열기, 즐겨찾기, 확대, 축소 | 크롬, 엣지, 웨일 (`chrome.exe`, `msedge.exe`, `whale.exe`) |
+| **한글** | 저장, 다른 이름, 글자 모양, 문단 모양, 쪽 나누기, 맞춤법, 인쇄, 되돌리기, 문자표 | 한글 (`Hwp.exe`) |
+| **워드** | 저장, 굵게, 가운데, 쪽 나누기, 찾아 바꾸기, 인쇄, 되돌리기, 다시 실행 | 워드 (`WINWORD.EXE`) |
+| **엑셀** | 저장, 되돌리기, 다시 실행, 필터, 합계, 오늘 날짜, 셀 서식, 찾기 | 엑셀 (`EXCEL.EXE`) |
+| **파워포인트** | 새 슬라이드, 처음부터, 지금부터, 복제, 그룹, 그룹 해제, 저장, 되돌리기 | 파워포인트 (`POWERPNT.EXE`) |
+| **포토샵** | 이동, 브러시, 지우개, 자유 변형, 새 레이어, 되돌리기, 다시 실행, 저장, 내보내기 | 포토샵 (`Photoshop.exe`) |
+| **프리미어 프로** | 선택, 자르기, 편집 추가, 잔물결 삭제, 재생/정지, 마커, 확대, 축소, 내보내기 | 프리미어 프로 (`Adobe Premiere Pro.exe`) |
 
 ---
 
@@ -332,7 +355,7 @@ flowchart TD
     C --> D["PyInstaller 폴더 패키징"]:::box
     D --> E["불필요한 파일 삭제 (28MB 절약)"]:::box
     E --> F["Inno Setup (초고압축 한글 설치 파일)"]:::box
-    F --> G["VirtualDeck-1.6.3-Setup.exe (38.4 MB)"]:::done
+    F --> G["VirtualDeck-1.6.4-Setup.exe (38.4 MB)"]:::done
 ```
 
 ---
@@ -373,6 +396,7 @@ python build_exe.py
 
 ### 📜 버전 기록 요약
 
+- **v1.6.4**: 설정 창 오른쪽 잘림 수정, 한국 사용자용 프로필 예시 모음 추가.
 - **v1.6.3**: 스타일 카드 중복 선택 방지(맑음·젖빛 구분), 화면 끝 자석 스냅 시 상단 메뉴 잘림 해결, 포커스 없는 입력창 휠 오작동 방지, 버튼 설정 창 및 환경설정 창 820px 2칸 레이아웃 개편(한눈에 보기), 켜기/끄기 실제 프로그램·폴더 실행 상태 실시간 감지 및 창 닫기 지원.
 - **v1.6.2**: 불필요한 DLL 및 다국어 번역 파일 제거로 프로그램 용량 30MB 다이어트, 인스톨러 초고압축(38.4MB) 적용.
 - **v1.6.1**: 색 유리(하늘/노을/숲) 캡처 배경 합성 오류 수정 및 코드 인스펙션 완료.

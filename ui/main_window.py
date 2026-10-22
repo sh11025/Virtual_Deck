@@ -1085,15 +1085,15 @@ class MainWindow(QWidget):
         exe_l, title_l = (exe or "").lower(), (title or "").lower()
         best, best_score = None, 0
         for pid, prof in self.profiles.items():
-            proc = prof.target_process.strip().lower()
+            procs = [p.strip().lower() for p in prof.target_process.replace(",", ";").split(";") if p.strip()]
             words = [w.strip().lower() for w in prof.target_title.split(",") if w.strip()]
-            if not proc and not words:
+            if not procs and not words:
                 continue
-            if proc and proc != exe_l:
+            if procs and exe_l not in procs:
                 continue
             if words and not any(w in title_l for w in words):
                 continue
-            score = (2 if words else 0) + (1 if proc else 0)
+            score = (2 if words else 0) + (1 if procs else 0)
             if score > best_score:
                 best, best_score = pid, score
         if best is None and "profile_default" in self.profiles:

@@ -68,8 +68,8 @@ def get_builtin_theme(name: str) -> Optional[Dict[str, Any]]:
 
 
 class StorageService:
-    def __init__(self, file_name: str = "config.json"):
-        self.data_dir = paths.data_dir()
+    def __init__(self, file_name: str = "config.json", data_dir: str = None):
+        self.data_dir = data_dir or paths.data_dir()
         self.file_path = os.path.join(self.data_dir, file_name)
         paths.ensure_default_icons()
 
@@ -326,41 +326,21 @@ class StorageService:
 
     # ------------------------------------------------------------ 기본 데이터
     def _create_default_data(self) -> Tuple[AppConfig, Dict[str, DeckProfile], str]:
-        config = AppConfig()
-        B = DeckButtonData
+        from services.sample_profiles import SAMPLES, create_sample_profile
+        config = AppConfig(rows=3, cols=4)
 
-        def profile(pid, name, proc, items):
-            prof = DeckProfile(id=pid, name=name, target_process=proc)
-            for b in items:
-                prof.buttons[b.id] = b
+        sample_map = {item["key"]: item for item in SAMPLES}
+        default = create_sample_profile(sample_map["default"], "profile_default")
+        browser = create_sample_profile(sample_map["browser"], "profile_browser")
+        study = create_sample_profile(sample_map["study"], "profile_study")
+
+        for prof in (default, browser, study):
             self.ensure_grid(prof, config.rows, config.cols)
-            return prof
 
-        default = profile("profile_default", "기본", "", [
-            B("btn_0_0", "Google", "icon:globe", "url", "https://www.google.com", 0, 0, color="blue"),
-            B("btn_0_1", "메모장", "icon:note", "program", "notepad.exe", 0, 1),
-            B("btn_0_2", "복사", "icon:copy", "shortcut", "Ctrl + C", 0, 2),
-            B("btn_1_0", "볼륨 -", "icon:volume_down", "media", "VolumeDown", 1, 0),
-            B("btn_1_1", "음소거", "icon:volume_mute", "media", "VolumeMute", 1, 1, color="mint", toggle=True),
-            B("btn_1_2", "붙여넣기", "icon:paste", "shortcut", "Ctrl + V", 1, 2),
-            B("btn_2_0", "볼륨 +", "icon:volume_up", "media", "VolumeUp", 2, 0),
-            B("btn_2_1", "재생/정지", "icon:play_pause", "media", "MediaPlayPause", 2, 1, color="orange"),
-            B("btn_2_2", "캡처", "icon:screenshot", "shortcut", "Win + Shift + S", 2, 2, color="purple"),
-        ])
-        chrome = profile("profile_chrome", "Chrome", "chrome.exe", [
-            B("btn_0_0", "뒤로", "icon:arrow_left", "shortcut", "Alt + Left", 0, 0),
-            B("btn_0_1", "새로고침", "icon:refresh", "shortcut", "F5", 0, 1, color="blue"),
-            B("btn_0_2", "앞으로", "icon:arrow_right", "shortcut", "Alt + Right", 0, 2),
-            B("btn_1_0", "새 탭", "icon:tab_new", "shortcut", "Ctrl + T", 1, 0, color="mint"),
-            B("btn_1_1", "탭 닫기", "icon:tab_close", "shortcut", "Ctrl + W", 1, 1, color="red"),
-            B("btn_1_2", "북마크", "icon:star", "shortcut", "Ctrl + D", 1, 2, color="yellow"),
-        ])
-        photoshop = profile("profile_photoshop", "Photoshop", "Photoshop.exe", [
-            B("btn_0_0", "되돌리기", "icon:undo", "shortcut", "Ctrl + Z", 0, 0),
-            B("btn_0_1", "다시 실행", "icon:redo", "shortcut", "Ctrl + Shift + Z", 0, 1),
-            B("btn_0_2", "저장", "icon:save", "shortcut", "Ctrl + S", 0, 2, color="orange"),
-            B("btn_1_0", "다른 이름", "icon:file", "shortcut", "Ctrl + Shift + S", 1, 0),
-        ])
-        profiles = {p.id: p for p in (default, chrome, photoshop)}
+        profiles = {
+            "profile_default": default,
+            "profile_browser": browser,
+            "profile_study": study,
+        }
         self.save_data(config, profiles, "profile_default")
         return config, profiles, "profile_default"

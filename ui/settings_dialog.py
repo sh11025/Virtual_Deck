@@ -10,9 +10,9 @@ from typing import Dict
 from PySide6.QtCore import Qt, Signal, QRectF, QRect, QSize
 from PySide6.QtGui import QPainter, QColor, QFont, QPixmap, QPen
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QSlider, QStackedWidget, QComboBox,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QSlider, QStackedWidget, QComboBox,
     QFileDialog, QColorDialog, QAbstractButton, QGridLayout, QScrollArea, QFrame, QListWidget,
-    QListWidgetItem,
+    QListWidgetItem, QSizePolicy,
 )
 
 from models.config_model import AppConfig, SIZE_PRESETS
@@ -97,9 +97,11 @@ def page() -> (QWidget, QVBoxLayout):
     """스크롤 영역 안의 기본 페이지 생성 도우미"""
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
     scroll.setFrameShape(QFrame.NoFrame)
     content = QWidget()
     content.setAttribute(Qt.WA_TranslucentBackground, True)
+    content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
     v = QVBoxLayout(content)
     v.setContentsMargins(4, 6, 8, 12)
     v.setSpacing(14)

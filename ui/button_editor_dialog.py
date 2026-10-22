@@ -11,8 +11,8 @@ from urllib.parse import urlparse
 from PySide6.QtCore import Qt, Signal, QRectF
 from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QStackedWidget,
-    QFileDialog, QScrollArea, QFrame, QSpinBox,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QStackedWidget,
+    QFileDialog, QScrollArea, QFrame, QSpinBox, QSizePolicy,
 )
 
 from core import paths
@@ -41,14 +41,25 @@ class EmojiGrid(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.cols = 12
+        self.cols = 6
         self.cell = 38
         self.current = ""
         self._hover = -1
         self.setMouseTracking(True)
         self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumWidth(6 * self.cell + 4)
+        self._layout()
+
+    def _layout(self):
         rows = (len(self.ICONS) + self.cols - 1) // self.cols
-        self.setFixedSize(self.cols * self.cell + 4, rows * self.cell + 4)
+        self.setFixedHeight(rows * self.cell + 4)
+
+    def resizeEvent(self, e):
+        cols = max(6, (self.width() - 4) // self.cell)
+        if cols != self.cols:
+            self.cols = cols
+            self._layout()
+        super().resizeEvent(e)
 
     def set_current(self, text: str):
         self.current = text
@@ -384,13 +395,21 @@ class ThemeIconGrid(QWidget):
     def __init__(self, style: str = "line", parent=None):
         super().__init__(parent)
         self.style = style
-        self.cols = 12
+        self.cols = 6
         self.cell = 38
         self.current = ""
         self._hover = None
         self.setMouseTracking(True)
         self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumWidth(6 * self.cell + 4)
         self._layout()
+
+    def resizeEvent(self, e):
+        cols = max(6, (self.width() - 4) // self.cell)
+        if cols != self.cols:
+            self.cols = cols
+            self._layout()
+        super().resizeEvent(e)
 
     def _layout(self):
         self.items = []     # (이름, QRectF)
@@ -404,7 +423,7 @@ class ThemeIconGrid(QWidget):
                 r, c = divmod(i, self.cols)
                 self.items.append((n, QRectF(2 + c * self.cell + 2, y + r * self.cell + 2, self.cell - 4, self.cell - 4)))
             y += ((len(names) + self.cols - 1) // self.cols) * self.cell + 6
-        self.setFixedSize(self.cols * self.cell + 4, y)
+        self.setFixedHeight(y)
 
     def set_style(self, style: str):
         self.style = style
@@ -483,7 +502,8 @@ class IconPicker(QWidget):
         self.theme_grid = ThemeIconGrid(style)
         self.theme_grid.picked.connect(self.picked)
         sc = QScrollArea()
-        sc.setWidgetResizable(False)
+        sc.setWidgetResizable(True)
+        sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         sc.setFrameShape(QFrame.NoFrame)
         sc.setWidget(self.theme_grid)
         sc.setFixedHeight(184)
@@ -496,7 +516,7 @@ class IconPicker(QWidget):
         ev.setSpacing(6)
         self.emoji = EmojiGrid()
         self.emoji.picked.connect(self.picked)
-        ev.addWidget(self.emoji, 0, Qt.AlignLeft)
+        ev.addWidget(self.emoji)
         self.emoji_edit = QLineEdit()
         self.emoji_edit.setPlaceholderText("직접 입력: 이모지나 글자 한두 개 (Win + . 키로 이모지 창 열기)")
         self.emoji_edit.textEdited.connect(lambda t: t.strip() and self.picked.emit(t.strip()))
@@ -559,7 +579,7 @@ class ButtonEditorDialog(GlassDialog):
 
     def __init__(self, data: DeckButtonData, in_folder: bool = False, icon_style: str = "line",
                  parent=None, modeless: bool = True):
-        super().__init__("버튼 설정", "모양과 누르면 할 일을 정해요", parent=parent, width=820, modeless=modeless)
+        super().__init__("버튼 설정", "모양과 누르면 할 일을 정해요", parent=parent, width=900, modeless=modeless)
         self.data = data
         self.in_folder = in_folder
         self.cleared = False
@@ -576,14 +596,18 @@ class ButtonEditorDialog(GlassDialog):
         # ------------------------------------------------ 왼쪽: 무엇을 할까요
         left_scroll = QScrollArea()
         left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         left_scroll.setFrameShape(QFrame.NoFrame)
         left_content = QWidget()
         left_content.setAttribute(Qt.WA_TranslucentBackground, True)
+        left_content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         left_v = QVBoxLayout(left_content)
         left_v.setContentsMargins(2, 0, 8, 0)
         left_v.setSpacing(10)
         left_scroll.setWidget(left_content)
-        cols_lay.addWidget(left_scroll, 1)
+        self.left_scroll = left_scroll
+        self.left_content = left_content
+        cols_lay.addWidget(left_scroll, 5)
 
         # 1. 이름 칸 + 켜기/끄기 스위치 (한 줄)
         name_toggle_row = QHBoxLayout()
@@ -605,7 +629,7 @@ class ButtonEditorDialog(GlassDialog):
         toggle_row.setSpacing(6)
         self.toggle = GlassToggle()
         self.toggle.toggled.connect(self._on_toggle)
-        toggle_lbl = QLabel("누를 때마다 켜기/끄기")
+        toggle_lbl = QLabel("켜기/끄기")
         toggle_lbl.setFont(theme.ui_font(12))
         toggle_row.addWidget(self.toggle)
         toggle_row.addWidget(toggle_lbl)
@@ -625,7 +649,7 @@ class ButtonEditorDialog(GlassDialog):
 
         # 3. 버튼 크기
         left_v.addWidget(section_label("버튼 크기"))
-        self.span_tabs = SegmentedTabs(["1칸", "가로 2칸", "세로 2칸", "4칸 (2×2)"])
+        self.span_tabs = SegmentedTabs(["1칸", "가로 2칸", "세로 2칸", "4칸"])
         self.span_tabs.currentChanged.connect(lambda _: self._update_preview())
         left_v.addWidget(self.span_tabs)
         left_v.addWidget(hint_label("큰 버튼이 덮는 칸의 기존 버튼은 숨겨집니다."))
@@ -652,14 +676,18 @@ class ButtonEditorDialog(GlassDialog):
         # ------------------------------------------------ 오른쪽: 어떻게 보일까요
         right_scroll = QScrollArea()
         right_scroll.setWidgetResizable(True)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         right_scroll.setFrameShape(QFrame.NoFrame)
         right_content = QWidget()
         right_content.setAttribute(Qt.WA_TranslucentBackground, True)
+        right_content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         right_v = QVBoxLayout(right_content)
         right_v.setContentsMargins(8, 0, 2, 0)
         right_v.setSpacing(10)
         right_scroll.setWidget(right_content)
-        cols_lay.addWidget(right_scroll, 1)
+        self.right_scroll = right_scroll
+        self.right_content = right_content
+        cols_lay.addWidget(right_scroll, 6)
 
         # 1. 미리보기 (중앙 정렬)
         preview_wrap = QHBoxLayout()
@@ -690,19 +718,15 @@ class ButtonEditorDialog(GlassDialog):
         # 3. 아이콘 색 · 유리 색
         colors_box = QVBoxLayout()
         colors_box.setSpacing(6)
-        c_row1 = QHBoxLayout()
-        c_row1.addWidget(QLabel("아이콘 색"))
+        colors_box.addWidget(QLabel("아이콘 색"))
         self.icon_colors = ColorChips(mode="icon")
         self.icon_colors.changed.connect(lambda _: self._update_preview())
-        c_row1.addWidget(self.icon_colors, 1)
-        colors_box.addLayout(c_row1)
+        colors_box.addWidget(self.icon_colors)
 
-        c_row2 = QHBoxLayout()
-        c_row2.addWidget(QLabel("유리 색"))
+        colors_box.addWidget(QLabel("유리 색"))
         self.colors = ColorChips()
         self.colors.changed.connect(lambda _: self._update_preview())
-        c_row2.addWidget(self.colors, 1)
-        colors_box.addLayout(c_row2)
+        colors_box.addWidget(self.colors)
         right_v.addLayout(colors_box)
         right_v.addWidget(hint_label("아이콘 색의 ‘A’는 버튼 색에 맞춰 자동으로 고릅니다."))
         right_v.addStretch(1)
@@ -723,7 +747,7 @@ class ButtonEditorDialog(GlassDialog):
 
         self._load()
         avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
-        dialog_w = min(820, int(avail.width() * 0.90))
+        dialog_w = min(900, int(avail.width() * 0.92))
         dialog_h = min(int(avail.height() * 0.85), 680)
         self.resize(dialog_w, dialog_h)
 
@@ -783,11 +807,14 @@ class ButtonEditorDialog(GlassDialog):
         return any(getattr(init, a) != getattr(cur, a) for a in attrs)
 
     def _sync_toggle_hint(self):
-        act_type = self.action.get_type()
-        if act_type in ("program", "folder"):
-            self.toggle_hint.setText("켜져 있으면 불이 들어오고, 다시 누르면 닫아요")
-        else:
-            self.toggle_hint.setText("누를 때마다 불이 켜지고 꺼져요")
+        on = self.toggle.isChecked()
+        self.toggle_hint.setVisible(on)
+        if on:
+            act_type = self.action.get_type()
+            if act_type in ("program", "folder"):
+                self.toggle_hint.setText("켜져 있으면 불이 들어오고, 다시 누르면 닫아요")
+            else:
+                self.toggle_hint.setText("누를 때마다 불이 켜지고 꺼져요")
 
     def _on_toggle(self, on):
         self.off_box.setVisible(on)

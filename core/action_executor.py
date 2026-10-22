@@ -85,7 +85,7 @@ class ActionExecutor:
                 return True, ""
             if action_type == "close":
                 from core.running_state import close_program_windows, close_folder_windows
-                clean = data.strip().strip("\"'")
+                clean = os.path.expandvars(data.strip().strip("\"'"))
                 if os.path.isdir(clean):
                     cnt = close_folder_windows(clean)
                 else:
@@ -99,15 +99,21 @@ class ActionExecutor:
 
     @staticmethod
     def _open_url(url: str) -> Tuple[bool, str]:
-        if "://" not in url and not url.lower().startswith(("mailto:", "tel:")):
-            url = "https://" + url
-        if webbrowser.open(url):
+        raw = url.strip()
+        if raw.lower().startswith("ms-settings:"):
+            if os.name == "nt":
+                os.startfile(raw)  # type: ignore[attr-defined]
+                return True, "설정을 열었어요"
+            return False, "Windows에서만 지원해요"
+        if "://" not in raw and not raw.lower().startswith(("mailto:", "tel:")):
+            raw = "https://" + raw
+        if webbrowser.open(raw):
             return True, "웹사이트를 열었어요"
         return False, "웹 브라우저를 열지 못했어요."
 
     @staticmethod
     def _run_program(command: str) -> Tuple[bool, str]:
-        clean = command.strip().strip("\"'")
+        clean = os.path.expandvars(command.strip().strip("\"'"))
 
         # 1) 경로가 실제로 있는 경우: 탐색기에서 더블클릭한 것과 똑같이 실행
         #    (띄어쓰기가 있는 경로, 관리자 권한이 필요한 프로그램, .bat/.lnk 모두 OK)
@@ -129,14 +135,15 @@ class ActionExecutor:
 
         # 3) '프로그램 경로 + 옵션' 형태의 명령줄 (예: notepad.exe C:\메모.txt)
         try:
-            subprocess.Popen(command, close_fds=True)
+            expanded = os.path.expandvars(command)
+            subprocess.Popen(expanded, close_fds=True)
             return True, "명령을 실행했어요"
         except OSError:
             return False, f"프로그램을 찾을 수 없어요: {clean}"
 
     @staticmethod
     def _open_path(path: str, kind: str) -> Tuple[bool, str]:
-        clean = path.strip().strip("\"'")
+        clean = os.path.expandvars(path.strip().strip("\"'"))
         if not os.path.exists(clean):
             word = "폴더" if kind == "folder" else "파일"
             return False, f"{word}을(를) 찾을 수 없어요: {clean}"

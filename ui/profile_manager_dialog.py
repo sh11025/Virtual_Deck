@@ -8,19 +8,136 @@ import time
 from typing import Dict
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLineEdit, QComboBox,
-    QFileDialog,
+    QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLineEdit, QComboBox,
+    QFileDialog, QGridLayout, QCheckBox, QLabel,
 )
 
 from core.app_detector import AppDetector
 from models.profile_model import DeckProfile
+from services.sample_profiles import SAMPLES, create_sample_profile
+from ui import theme
+from ui.theme import T
 from ui.widgets import GlassDialog, GlassButton, section_label, hint_label, ask, inform
+
+AUTO_HINTS = {
+    "Hwp.exe": "한글을 쓸 때 자동으로 바뀌어요",
+    "WINWORD.EXE": "워드를 쓸 때 자동으로 바뀌어요",
+    "EXCEL.EXE": "엑셀을 쓸 때 자동으로 바뀌어요",
+    "POWERPNT.EXE": "파워포인트를 쓸 때 자동으로 바뀌어요",
+    "Photoshop.exe": "포토샵을 쓸 때 자동으로 바뀌어요",
+    "Adobe Premiere Pro.exe": "프리미어 프로를 쓸 때 자동으로 바뀌어요",
+    "chrome.exe;msedge.exe;whale.exe": "웹 브라우저를 쓸 때 자동으로 바뀌어요",
+}
+
+
+class SampleProfilesDialog(GlassDialog):
+    """프로필 예시 모음 창 (모달 없이 한눈에 선택)"""
+
+    def __init__(self, manager: "ProfileManagerDialog", parent=None):
+        super().__init__("예시 모음", "필요한 작업 환경을 골라 추가해 보세요", parent=parent, width=560, modeless=True)
+        self.manager = manager
+        self.checkboxes = []
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+
+        for i, item in enumerate(SAMPLES):
+            card = QWidget()
+            cv = QVBoxLayout(card)
+            cv.setContentsMargins(6, 4, 6, 4)
+            cv.setSpacing(2)
+
+            cb = QCheckBox(item["name"])
+            cb.setFont(theme.ui_font(13, QFont.Bold))
+            cb.setCursor(Qt.PointingHandCursor)
+            cv.addWidget(cb)
+            self.checkboxes.append((cb, item))
+
+            desc_lbl = QLabel(item["description"])
+            desc_lbl.setStyleSheet(f"color: {T().text_dim}; font-size: 11px;")
+            cv.addWidget(desc_lbl)
+
+            hint_text = AUTO_HINTS.get(item.get("target_process", ""))
+            if hint_text:
+                auto_lbl = QLabel(hint_text)
+                auto_lbl.setStyleSheet(f"color: {T().accent}; font-size: 11px;")
+                cv.addWidget(auto_lbl)
+            else:
+                cv.addSpacing(14)
+
+            r, c = divmod(i, 2)
+            grid.addWidget(card, r, c)
+
+        self.body.addLayout(grid)
+        self.body.addSpacing(8)
+
+        self.footer.addStretch(1)
+        close_btn = GlassButton("닫기")
+        close_btn.clicked.connect(self.close)
+        self.footer.addWidget(close_btn)
+
+        add_btn = GlassButton("추가", tint="blue", icon_name="plus")
+        add_btn.clicked.connect(self._add_selected)
+        self.footer.addWidget(add_btn)
+
+        self.resize(560, 480)
+
+    def _toast(self, msg: str, level: str = "info"):
+        cur = self.manager
+        while cur is not None:
+            if hasattr(cur, "show_toast"):
+                cur.show_toast(msg, level)
+                return
+            cur = cur.parent()
+
+    def _add_selected(self):
+        selected = [item for cb, item in self.checkboxes if cb.isChecked()]
+        if not selected:
+            self._toast("추가할 예시를 하나 이상 선택해 주세요.", "warn")
+            return
+
+        # 되돌리기 스택 보관
+        p = self.manager.parent()
+        if p and hasattr(p, "push_undo"):
+            p.push_undo(all_profiles=True)
+
+        rows = 3
+        cols = 4
+        if p and hasattr(p, "config"):
+            rows = p.config.rows
+            cols = p.config.cols
+
+        existing_names = {prof.name for prof in self.manager.profiles.values()}
+        last_pid = None
+
+        for item in selected:
+            name = item["name"]
+            if name in existing_names:
+                cand = f"{name} (예시)"
+                k = 2
+                while cand in existing_names:
+                    cand = f"{name} (예시 {k})"
+                    k += 1
+                name = cand
+            existing_names.add(name)
+
+            pid = self.manager._new_id()
+            prof = create_sample_profile(item, pid)
+            prof.name = name
+            self.manager.storage.ensure_grid(prof, rows, cols)
+            self.manager.profiles[pid] = prof
+            last_pid = pid
+
+        self.manager._populate(last_pid)
+        self.close()
+        self._toast(f"예시 {len(selected)}개를 추가했어요. 버튼을 우클릭해서 내 것으로 바꿔 보세요.", "success")
 
 
 class ProfileManagerDialog(GlassDialog):
     def __init__(self, profiles: Dict[str, DeckProfile], current_id: str, storage, parent=None):
-        super().__init__("프로필 관리", "프로그램마다 다른 버튼 구성을 쓸 수 있어요", parent=parent, width=620)
+        super().__init__("프로필 관리", "프로그램마다 다른 버튼 구성을 쓸 수 있어요", parent=parent, width=640)
         self.profiles = profiles
         self.selected_id = current_id
         self.storage = storage
@@ -38,11 +155,14 @@ class ProfileManagerDialog(GlassDialog):
         lb.setSpacing(6)
         add = GlassButton("새로", tint="blue", icon_name="plus")
         add.clicked.connect(self._add)
+        samples_btn = GlassButton("예시 모음…", icon_name="grid")
+        samples_btn.clicked.connect(self._open_samples)
         dup = GlassButton("복제", icon_name="duplicate")
         dup.clicked.connect(self._duplicate)
         self.del_btn = GlassButton("삭제", icon_name="trash")
         self.del_btn.clicked.connect(self._delete)
         lb.addWidget(add)
+        lb.addWidget(samples_btn)
         lb.addWidget(dup)
         lb.addStretch(1)
         lb.addWidget(self.del_btn)
@@ -185,6 +305,13 @@ class ProfileManagerDialog(GlassDialog):
         while pid in self.profiles:
             pid += "_1"
         return pid
+
+    def _open_samples(self):
+        dlg = SampleProfilesDialog(self, parent=self.parent() or self)
+        if self.parent():
+            geo = self.parent().geometry()
+            dlg.move(geo.right() + 10, geo.top())
+        dlg.show()
 
     def _add(self):
         pid = self._new_id()
