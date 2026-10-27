@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass
 
 from PySide6.QtGui import QColor, QFontDatabase, QFont
+from PySide6.QtWidgets import QApplication
 
 from core import paths
 
@@ -155,6 +156,48 @@ def ui_font(size: float = 13, weight=QFont.Medium) -> QFont:
     return f
 
 
+UI_SCALE = 1.0
+SCALES = {"S": 0.92, "M": 1.0, "L": 1.12}
+
+def set_ui_scale(key_or_val):
+    global UI_SCALE
+    if isinstance(key_or_val, str):
+        UI_SCALE = SCALES.get(key_or_val, 1.0)
+    elif isinstance(key_or_val, (int, float)):
+        UI_SCALE = float(key_or_val)
+    else:
+        UI_SCALE = 1.0
+
+def ui_scale() -> float:
+    return UI_SCALE
+
+def dialog_font(size: float = 13, weight=QFont.Medium) -> QFont:
+    scaled_size = round(size * UI_SCALE)
+    return ui_font(scaled_size, weight=weight)
+
+
+def apply_ui_scale(key_or_val):
+    """글자 크기 스케일을 설정하고 열려 있는 위젯들의 스타일시트 및 폰트를 즉시 갱신"""
+    set_ui_scale(key_or_val)
+    app = QApplication.instance()
+    if app is not None:
+        app.setStyleSheet(get_qss())
+        for w in app.allWidgets():
+            try:
+                type_name = type(w).__name__
+                if type_name == "GlassButton":
+                    w.setFont(dialog_font(14, QFont.DemiBold))
+                    w.updateGeometry()
+                elif type_name == "SegmentedTabs":
+                    w.setFont(dialog_font(14, QFont.DemiBold))
+                    w.updateGeometry()
+                elif type_name == "KeyCaptureEdit":
+                    w.setFont(dialog_font(12, QFont.Bold))
+                    w.updateGeometry()
+            except (RuntimeError, Exception):
+                pass
+
+
 def emoji_font(size: float) -> QFont:
     f = QFont()
     f.setFamilies(EMOJI_FONTS + [UI_FONT])
@@ -186,21 +229,55 @@ def _arrow_files(color: str):
     return out
 
 
+def _spin_icons(color: str):
+    """숫자칸의 -, + 그림을 임시 폴더에 만들어 둡니다."""
+    from PySide6.QtCore import QRectF, Qt, QPointF
+    from PySide6.QtGui import QImage, QPainter, QColor, QPen
+    from ui.glass import draw_icon
+    folder = paths.cache_dir()
+    minus_path = os.path.join(folder, f"spin_minus_{color.strip('#')}.png").replace("\\", "/")
+    plus_path = os.path.join(folder, f"spin_plus_{color.strip('#')}.png").replace("\\", "/")
+
+    if not os.path.exists(minus_path):
+        img = QImage(24, 24, QImage.Format_ARGB32_Premultiplied)
+        img.fill(Qt.transparent)
+        p = QPainter(img)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        pen = QPen(QColor(color), 2.2, Qt.SolidLine, Qt.RoundCap)
+        p.setPen(pen)
+        p.drawLine(QPointF(6, 12), QPointF(18, 12))
+        p.end()
+        img.save(minus_path)
+
+    if not os.path.exists(plus_path):
+        img = QImage(24, 24, QImage.Format_ARGB32_Premultiplied)
+        img.fill(Qt.transparent)
+        p = QPainter(img)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        draw_icon(p, "plus", QRectF(4, 4, 16, 16), QColor(color), width=2.2)
+        p.end()
+        img.save(plus_path)
+
+    return minus_path, plus_path
+
+
 def get_qss() -> str:
     """입력창, 목록, 메뉴, 툴팁 등 기본 위젯의 유리 스타일 (버튼은 코드로 직접 그림)"""
     t = _current
+    fs = lambda n: round(n * UI_SCALE)
     arrow_down, arrow_up = _arrow_files(t.text_dim)
+    spin_minus, spin_plus = _spin_icons(t.text_dim)
     return f"""
     QWidget {{
         color: {t.text};
         font-family: '{UI_FONT}', 'Malgun Gothic', 'Segoe UI';
-        font-size: 15px;
+        font-size: {fs(15)}px;
     }}
     QLabel {{ background: transparent; }}
-    QLabel[role="section"] {{ font-size: 17px; font-weight: 700; color: {t.text}; padding-top: 4px; }}
-    QLabel[role="hint"] {{ font-size: 13px; color: {t.text_dim}; }}
-    QLabel[role="title"] {{ font-size: 20px; font-weight: 700; }}
-    QLabel[role="value"] {{ font-size: 13px; font-weight: 600; color: {t.text_dim}; min-width: 44px; }}
+    QLabel[role="section"] {{ font-size: {fs(17)}px; font-weight: 700; color: {t.text}; padding-top: 4px; }}
+    QLabel[role="hint"] {{ font-size: {fs(13)}px; color: {t.text_dim}; }}
+    QLabel[role="title"] {{ font-size: {fs(20)}px; font-weight: 700; }}
+    QLabel[role="value"] {{ font-size: {fs(13)}px; font-weight: 600; color: {t.text_dim}; min-width: 44px; }}
 
     QLineEdit, QComboBox, QSpinBox, QPlainTextEdit {{
         background: {t.input_bg};
@@ -236,13 +313,17 @@ def get_qss() -> str:
     }}
     QComboBox QAbstractItemView::item {{ min-height: 28px; padding: 0 8px; border-radius: 6px; }}
 
-    QSpinBox::up-button, QSpinBox::down-button {{
-        subcontrol-origin: border; width: 20px; border: none; background: transparent;
+    QSpinBox {{
+        padding: 7px 32px;
     }}
-    QSpinBox::up-button {{ subcontrol-position: top right; margin: 3px 4px 0 0; }}
-    QSpinBox::down-button {{ subcontrol-position: bottom right; margin: 0 4px 3px 0; }}
-    QSpinBox::up-arrow {{ image: url("{arrow_up}"); width: 10px; height: 10px; }}
-    QSpinBox::down-arrow {{ image: url("{arrow_down}"); width: 10px; height: 10px; }}
+    QSpinBox::up-button, QSpinBox::down-button {{
+        subcontrol-origin: border; width: 28px; border: none; background: transparent;
+    }}
+    QSpinBox::up-button {{ subcontrol-position: center right; margin-right: 2px; }}
+    QSpinBox::down-button {{ subcontrol-position: center left; margin-left: 2px; }}
+    QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {t.select_bg}; border-radius: 6px; }}
+    QSpinBox::up-arrow {{ image: url("{spin_plus}"); width: 14px; height: 14px; }}
+    QSpinBox::down-arrow {{ image: url("{spin_minus}"); width: 14px; height: 14px; }}
 
     QListWidget {{
         background: {t.input_bg};
@@ -286,7 +367,7 @@ def get_qss() -> str:
         border: 1px solid {t.popup_border};
         border-radius: 8px;
         padding: 6px 9px;
-        font-size: 12px;
+        font-size: {fs(12)}px;
     }}
 
     QMenu {{

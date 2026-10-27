@@ -1008,8 +1008,8 @@ test_btn = DeckButtonData(id="btn_0_0", row=0, col=0, name="테스트", action_t
 beditor = ButtonEditorDialog(test_btn, parent=w, modeless=True)
 prog_page = beditor.action.pages.get("program")
 check(prog_page is not None, "program 설정 페이지 존재")
-pick_btns = [child for child in prog_page.findChildren(object) if getattr(child, "text", lambda: "")() == "설치된 앱…"]
-check(len(pick_btns) >= 1, "program 페이지에 '설치된 앱…' 버튼이 있음")
+pick_btns = [child for child in prog_page.findChildren(object) if getattr(child, "text", lambda: "")() == "앱 목록"]
+check(len(pick_btns) >= 1, "program 페이지에 '앱 목록' 버튼이 있음")
 
 # app_picked 흉내 -> 이름 칸 자동 채움
 beditor.name_edit.setText("")

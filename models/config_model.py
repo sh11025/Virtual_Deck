@@ -33,6 +33,7 @@ class AppConfig:
 
     # 모양
     theme: str = "light"            # 'light' | 'dark'
+    font_size: str = "M"            # 'S' | 'M' | 'L'
     show_labels: bool = True        # 버튼 이름 표시
     icon_style: str = "line"        # 'line' | 'duotone' | 'emoji'
 
@@ -107,6 +108,8 @@ class AppConfig:
             cfg.layout_version = 3
         if cfg.icon_style not in ("line", "duotone", "emoji"):
             cfg.icon_style = "line"
+        if getattr(cfg, "font_size", None) not in ("S", "M", "L"):
+            cfg.font_size = "M"
         cfg.hold_ms = max(300, min(1500, int(cfg.hold_ms)))
         cfg.backup_days = max(1, min(60, int(cfg.backup_days)))
         if not isinstance(cfg.user_themes, dict):

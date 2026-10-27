@@ -577,6 +577,14 @@ def draw_icon(p: QPainter, name: str, rect: QRectF, color: QColor, width: float 
         path.lineTo(pt(0.55, -0.22))
         path.lineTo(pt(0.15, -0.3))
         p.drawPath(path)
+    else:
+        try:
+            from ui.icons import paint_icon, PREFIX, REGISTRY
+            k = name[len(PREFIX):] if name.startswith(PREFIX) else name
+            if k in REGISTRY:
+                paint_icon(p, PREFIX + k, rect, color)
+        except Exception:
+            pass
     p.restore()
 
 

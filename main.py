@@ -44,7 +44,12 @@ def main():
     from services.storage_service import StorageService
     from ui.main_window import MainWindow
 
-    window = MainWindow(StorageService())
+    storage = StorageService()
+    cfg, _, _ = storage.load_data()
+    theme.set_ui_scale(getattr(cfg, "font_size", "M"))
+    app.setStyleSheet(theme.get_qss())
+
+    window = MainWindow(storage)
     window.show()
     code = app.exec()
     lock.unlock()

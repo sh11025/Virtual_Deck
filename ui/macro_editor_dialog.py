@@ -206,7 +206,7 @@ class MacroEditorDialog(GlassDialog):
         h = QHBoxLayout()
         self.val_edit = QLineEdit()
         h.addWidget(self.val_edit, 1)
-        self.browse_btn = GlassButton("찾기…", icon_name="folder")
+        self.browse_btn = GlassButton("찾기", icon_name="folder")
         self.browse_btn.clicked.connect(self._browse)
         h.addWidget(self.browse_btn)
         gl.addLayout(h)

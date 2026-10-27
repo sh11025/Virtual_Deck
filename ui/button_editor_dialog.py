@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, Signal, QRectF
 from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QStackedWidget,
-    QFileDialog, QScrollArea, QFrame, QSpinBox, QSizePolicy,
+    QFileDialog, QScrollArea, QFrame, QSizePolicy,
 )
 
 from core import paths
@@ -28,7 +28,7 @@ from ui.deck_button import DeckButtonWidget
 from ui.glass import paint_glass
 from ui.widgets import (
     GlassDialog, GlassButton, GlassToggle, ColorChips, ShortcutEditor, SegmentedTabs,
-    section_label, hint_label, inform, no_wheel,
+    section_label, hint_label, inform, no_wheel, make_spin,
 )
 
 
@@ -141,24 +141,24 @@ class ActionEditor(QWidget):
         w = QWidget()
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(6)
-        h = QHBoxLayout()
-        h.setSpacing(8)
+        v.setSpacing(8)
         edit = QLineEdit()
         edit.setPlaceholderText(placeholder)
         edit.textChanged.connect(lambda _: self.changed.emit())
-        h.addWidget(edit, 1)
+        v.addWidget(edit)
         if kind != "url":
-            browse = GlassButton("찾기…", icon_name="folder")
+            btn_row = QHBoxLayout()
+            btn_row.setSpacing(8)
+            browse = GlassButton("찾기", icon_name="folder")
             browse.clicked.connect(lambda: self._browse(kind, edit))
-            h.addWidget(browse)
+            btn_row.addWidget(browse, 1)
             if kind == "program":
-                pick_app_btn = GlassButton("설치된 앱…", icon_name="app")
+                pick_app_btn = GlassButton("앱 목록", icon_name="app")
                 pick_app_btn.clicked.connect(lambda: self._pick_app(edit))
-                h.addWidget(pick_app_btn)
+                btn_row.addWidget(pick_app_btn, 1)
+            v.addLayout(btn_row)
         else:
             edit.editingFinished.connect(lambda: self.url_done.emit(edit.text()))
-        v.addLayout(h)
         v.addWidget(hint_label(hint))
         w.edit = edit
         return w
@@ -262,21 +262,25 @@ class ActionEditor(QWidget):
         cb = QVBoxLayout(w.count_box)
         cb.setContentsMargins(0, 0, 0, 0)
         cb.setSpacing(8)
-        presets = QHBoxLayout()
+        presets = QVBoxLayout()
         presets.setSpacing(6)
-        for label, sec in (("1분", 60), ("3분", 180), ("5분", 300), ("10분", 600), ("25분", 1500), ("1시간", 3600)):
+        row1 = QHBoxLayout()
+        row1.setSpacing(6)
+        row2 = QHBoxLayout()
+        row2.setSpacing(6)
+        for i, (label, sec) in enumerate((("1분", 60), ("3분", 180), ("5분", 300), ("10분", 600), ("25분", 1500), ("1시간", 3600))):
             b = GlassButton(label)
             b.clicked.connect(lambda _=False, s_=sec: self._set_timer_seconds(w, s_))
-            presets.addWidget(b)
-        presets.addStretch(1)
+            if i < 3:
+                row1.addWidget(b, 1)
+            else:
+                row2.addWidget(b, 1)
+        presets.addLayout(row1)
+        presets.addLayout(row2)
         cb.addLayout(presets)
         tr = QHBoxLayout()
-        w.minutes = no_wheel(QSpinBox())
-        w.minutes.setRange(0, 1440)
-        w.minutes.setSuffix(" 분")
-        w.seconds = no_wheel(QSpinBox())
-        w.seconds.setRange(0, 59)
-        w.seconds.setSuffix(" 초")
+        w.minutes = make_spin(0, 1440, suffix=" 분", min_width=140)
+        w.seconds = make_spin(0, 59, suffix=" 초", min_width=140)
         for sp in (w.minutes, w.seconds):
             sp.valueChanged.connect(lambda _: self.changed.emit())
             tr.addWidget(sp, 1)
@@ -304,10 +308,27 @@ class ActionEditor(QWidget):
         w.minutes.setValue(sec // 60)
         w.seconds.setValue(sec % 60)
 
+    def _calc_page_height(self, page):
+        if page is None:
+            return 0
+        lay = page.layout()
+        pw = self.stack.width() or 400
+        base_h = page.sizeHint().height()
+        if lay and lay.hasHeightForWidth():
+            h_for_w = lay.heightForWidth(pw)
+            base_h = max(base_h, h_for_w)
+        for lbl in page.findChildren(QLabel):
+            if lbl.wordWrap() and lbl.isVisible():
+                lw = lbl.width() or (pw - 20)
+                req = lbl.heightForWidth(lw)
+                if req > 0:
+                    base_h = max(base_h, req + 24)
+        return base_h
+
     def _refit(self, *_):
         page = self.stack.currentWidget()
         if page is not None:
-            self.stack.setFixedHeight(page.sizeHint().height())
+            self.stack.setFixedHeight(self._calc_page_height(page))
 
     def _browse(self, kind, edit):
         if kind == "folder":
@@ -359,7 +380,7 @@ class ActionEditor(QWidget):
         if t in self.pages:
             self.stack.setCurrentWidget(self.pages[t])
             page = self.pages[t]
-            self.stack.setFixedHeight(page.sizeHint().height())
+            self.stack.setFixedHeight(self._calc_page_height(page))
         self.changed.emit()
 
     def current_type(self) -> str:

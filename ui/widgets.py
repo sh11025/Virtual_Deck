@@ -15,7 +15,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractButton, QPushButton, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QSizePolicy, QLineEdit, QComboBox, QMenu,
+    QSizePolicy, QLineEdit, QComboBox, QMenu, QSpinBox,
 )
 
 from ui import theme
@@ -41,6 +41,19 @@ def no_wheel(widget):
     widget.setFocusPolicy(Qt.StrongFocus)
     widget.installEventFilter(_NO_WHEEL_FILTER)
     return widget
+
+
+def make_spin(min_val: int, max_val: int, value: Optional[int] = None, suffix: str = "", min_width: int = 110) -> QSpinBox:
+    """가운데 정렬 및 [- 숫자 +] 모양의 숫자 조절 상자를 만듭니다."""
+    spin = no_wheel(QSpinBox())
+    spin.setRange(min_val, max_val)
+    if value is not None:
+        spin.setValue(value)
+    if suffix:
+        spin.setSuffix(suffix)
+    spin.setAlignment(Qt.AlignCenter)
+    spin.setMinimumWidth(min_width)
+    return spin
 
 
 # ------------------------------------------------------------------ 공통 도우미
@@ -114,7 +127,7 @@ class GlassButton(QPushButton):
         self._ripple_pos = QPointF()
         self.setCursor(Qt.PointingHandCursor)
         self.setAttribute(Qt.WA_Hover, True)
-        self.setFont(theme.ui_font(14, QFont.DemiBold))
+        self.setFont(theme.dialog_font(14, QFont.DemiBold))
         self.setSizePolicy(QSizePolicy.Fixed if square else QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.setFocusPolicy(Qt.TabFocus)
 
@@ -222,18 +235,22 @@ class GlassButton(QPushButton):
         else:
             p.setFont(self.font())
             p.setPen(fg)
-            text_rect = rect
-            # draw_text=False 이면 글자를 그리지 않음(서브클래스가 직접 그림)
             label = self.text() if self.draw_text else ""
+            fm = self.fontMetrics()
             if self.icon_name:
-                fm = self.fontMetrics()
+                avail_text_w = max(0, rect.width() - 16 - 6 - 16)
+                if fm.horizontalAdvance(label) > avail_text_w:
+                    label = fm.elidedText(label, Qt.ElideRight, int(avail_text_w))
                 total = 16 + 6 + fm.horizontalAdvance(label)
-                x0 = rect.center().x() - total / 2
+                x0 = max(rect.left() + 8, rect.center().x() - total / 2)
                 draw_icon(p, self.icon_name, QRectF(x0, rect.center().y() - 8, 16, 16), fg)
-                text_rect = QRectF(x0 + 22, rect.top(), total - 22, rect.height())
+                text_rect = QRectF(x0 + 22, rect.top(), max(0, rect.right() - (x0 + 22) - 4), rect.height())
                 p.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, label)
             elif label:
-                p.drawText(text_rect, Qt.AlignCenter, label)
+                avail_w = max(0, rect.width() - 12)
+                if fm.horizontalAdvance(label) > avail_w:
+                    label = fm.elidedText(label, Qt.ElideRight, int(avail_w))
+                p.drawText(rect, Qt.AlignCenter, label)
 
 
 # ------------------------------------------------------------------ 켜기/끄기 스위치
@@ -324,7 +341,7 @@ class SegmentedTabs(QWidget):
         self.setMouseTracking(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedHeight(46)
-        self.setFont(theme.ui_font(14, QFont.DemiBold))
+        self.setFont(theme.dialog_font(14, QFont.DemiBold))
 
     def setCurrentIndex(self, i: int, animate=True):
         if i == self.index:
@@ -471,7 +488,7 @@ class ColorChips(QWidget):
                 paint_glass(p, r, r.height() / 2, hover=hov, shadow_strength=0.6, rainbow=0.5, fill=0.8)
                 color = self.table[key][1]
                 if color is None:   # 자동: 'A' 표시
-                    p.setFont(theme.ui_font(12, QFont.Bold))
+                    p.setFont(theme.dialog_font(12, QFont.Bold))
                     p.setPen(QColor(T().text_dim))
                     p.drawText(r, Qt.AlignCenter, "A")
                 else:
@@ -830,7 +847,7 @@ class ModifierChip(QAbstractButton):
         self.setCursor(Qt.PointingHandCursor)
         self._hover = _Anim(self)
         self.toggled.connect(lambda _: self.update())
-        self.setFont(theme.ui_font(12, QFont.Bold))
+        self.setFont(theme.dialog_font(12, QFont.Bold))
         self.setFixedSize(60, 36)
 
     def enterEvent(self, e):
@@ -896,6 +913,7 @@ class ShortcutEditor(QWidget):
 
         self.preview = QLabel()
         self.preview.setProperty("role", "hint")
+        self.preview.setWordWrap(True)
         lay.addWidget(self.preview)
         self._emit()
 
@@ -944,5 +962,5 @@ class ShortcutEditor(QWidget):
     def _emit(self, *_):
         v = self.value()
         self.capture.setText(self.main_key)
-        self.preview.setText(f"보낼 단축키:  {v}" if v else "조합 키를 고르고, 입력칸을 누른 뒤 키를 눌러 주세요.")
+        self.preview.setText(f"보낼 단축키:  {v}" if v else "조합 키를 고르고 키를 누르세요.")
         self.changed.emit(v)
