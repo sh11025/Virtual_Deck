@@ -208,6 +208,9 @@ class MainWindow(QWidget):
         self.panel_radius = PANEL_RADIUS
         self._drag_offset: Optional[QPoint] = None
         self._dialog_open = set()
+        self._menu_open = 0
+        self._manual_hold_exe: Optional[str] = None
+        self._last_external_exe: str = ""
         self._settings_dlg = None
         self._editor_dlg = None
         self._capture_ok = False
@@ -658,9 +661,9 @@ class MainWindow(QWidget):
     # ================================================================ 1초마다: 정보 버튼 · 실제 상태 맞추기
     def _on_live_tick(self):
         self._live_tick_count = getattr(self, "_live_tick_count", 0) + 1
-        # 대화상자가 열려 있으면 덱이 대화상자 위로 올라오지 않도록 재적용을 건너뜀
+        # 대화상자나 메뉴가 열려 있으면 덱이 대화상자/메뉴 위로 올라오지 않도록 재적용을 건너뜀
         if (self.config.always_on_top and self.isVisible() and self._native_ready
-                and not self._dialog_open):
+                and not self._dialog_open and not self._menu_open):
             win32.keep_topmost(int(self.winId()), True)
         # 타이머는 덱을 숨겨도 계속 흘러가야 하므로 먼저 확인
         self.timers.tick(self._timer_data_for_key)
@@ -942,6 +945,14 @@ class MainWindow(QWidget):
         else:
             self.refresh_button(btn_id)
 
+    def _exec_menu(self, menu, pos):
+        self._menu_open += 1
+        try:
+            menu.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+            return menu.exec(pos)
+        finally:
+            self._menu_open = max(0, self._menu_open - 1)
+
     def _show_context_menu(self, btn_id: str, pos: QPoint):
         buttons = self.current_buttons()
         btn = buttons.get(btn_id)
@@ -967,7 +978,7 @@ class MainWindow(QWidget):
         act_undo = menu.addAction(menu_icon("undo"), "되돌리기" + (f"  ({len(self.undo_stack)})" if self.undo_stack else ""))
         act_undo.setEnabled(bool(self.undo_stack))
 
-        chosen = menu.exec(pos)
+        chosen = self._exec_menu(menu, pos)
         if chosen is None:
             return
         if chosen == act_edit:
@@ -1040,15 +1051,17 @@ class MainWindow(QWidget):
         menu.addSeparator()
         manage = menu.addAction(menu_icon("list"), "프로필 관리…")
         pos = self.profile_btn.mapToGlobal(QPoint(0, self.profile_btn.height()))
-        chosen = menu.exec(pos)
+        chosen = self._exec_menu(menu, pos)
         if chosen is None:
             return
         if chosen == manage:
             self._open_profile_manager()
         elif chosen.data():
-            self.switch_profile(chosen.data())
+            self.switch_profile(chosen.data(), manual=True)
 
-    def switch_profile(self, pid: str):
+    def switch_profile(self, pid: str, manual: bool = False):
+        if manual:
+            self._manual_hold_exe = (self._last_external_exe or "").lower() or None
         if pid in self.profiles and pid != self.current_profile_id:
             self.current_profile_id = pid
             self.folder_id = None
@@ -1066,7 +1079,7 @@ class MainWindow(QWidget):
                 for prof in self.profiles.values():
                     self.storage.ensure_grid(prof, self.config.rows, self.config.cols)
                 if dlg.selected_id in self.profiles:
-                    self.current_profile_id = dlg.selected_id
+                    self.switch_profile(dlg.selected_id, manual=True)
                 self.folder_id = None
                 self.undo_stack = [u for u in self.undo_stack if u[0] in self.profiles]  # 전체 되돌리기 기록은 프로필이 바뀌면 버림
                 self.save()
@@ -1077,11 +1090,16 @@ class MainWindow(QWidget):
     # 지금 쓰는 프로그램(과 창 제목)에 맞춰 프로필 자동 전환
     def _on_tracker_tick(self):
         ShortcutManager.update_target_window()
-        if not self.config.auto_switch_profile or self._dialog_open:
+        if not self.config.auto_switch_profile or self._dialog_open or self._menu_open:
             return
         exe, title, _ = AppDetector.get_foreground_app()
         if not exe:
             return
+        self._last_external_exe = exe
+        if self._manual_hold_exe:
+            if exe.lower() == self._manual_hold_exe:
+                return          # 같은 프로그램 안에서는 창 제목이 바뀌어도 자동 전환하지 않음
+            self._manual_hold_exe = None   # 다른 프로그램으로 옮겨 가면 다시 자동
         key = (exe, title)
         if key == self.last_detected_key:
             return

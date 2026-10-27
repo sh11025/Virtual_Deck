@@ -743,7 +743,7 @@ def ask_save_changes(parent, title: str = "저장할까요?",
 def glass_menu(parent=None) -> QMenu:
     """둥근 모서리가 깔끔하게 보이는 메뉴"""
     menu = QMenu(parent)
-    menu.setWindowFlags(menu.windowFlags() | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+    menu.setWindowFlags(menu.windowFlags() | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint | Qt.WindowStaysOnTopHint)
     menu.setAttribute(Qt.WA_TranslucentBackground, True)
     return menu
 

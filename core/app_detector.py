@@ -52,6 +52,11 @@ if IS_WINDOWS:
 
 
 
+def _is_own_pid(pid: int) -> bool:
+    """주어진 PID가 Virtual Deck 자신의 프로세스인지 확인합니다."""
+    return pid == os.getpid()
+
+
 class AppDetector:
     """Windows 활성 윈도우 및 실행 중인 프로세스를 감지하는 클래스"""
 
@@ -91,6 +96,8 @@ class AppDetector:
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
             if not pid.value:
                 return "", window_title, hwnd
+            if _is_own_pid(pid.value):
+                return "", "", 0
 
             # 3. 프로세스 파일명 추출
             exe_name = AppDetector._get_process_name_by_pid(pid.value)

@@ -490,7 +490,7 @@ class SettingsDialog(GlassDialog):
 
         self.auto_profile_toggle = GlassToggle(c.auto_switch_profile)
         self.auto_profile_toggle.toggled.connect(lambda on: self._set("auto_switch_profile", on))
-        right.addLayout(toggle_row("쓰는 프로그램에 맞춰 프로필 바꾸기", "포토샵, 브라우저 등 실행 중인 창에 맞춰 지정한 프로필로 자동 전환합니다.", self.auto_profile_toggle))
+        right.addLayout(toggle_row("쓰는 프로그램에 맞춰 프로필 바꾸기", "포토샵, 브라우저 등 실행 중인 창에 맞춰 지정한 프로필로 자동 전환합니다. 직접 고른 프로필은 다른 프로그램으로 옮겨 갈 때까지 유지돼요.", self.auto_profile_toggle))
 
         self.sync_mute_toggle = GlassToggle(c.sync_toggle_state)
         self.sync_mute_toggle.toggled.connect(lambda on: self._set("sync_toggle_state", on))

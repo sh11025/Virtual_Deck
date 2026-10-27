@@ -709,6 +709,90 @@ check("기본 (예시)" in names, f"중복된 '기본' 이름이 '기본 (예시
 check("한글" in names, f"새로운 '한글' 예시가 정상 추가됨 ({names})")
 pm.close()
 
+# ====================================================================
+section("프로필 메뉴 및 수동 프로필 유지 (1.6.6)")
+# 1. _exec_menu 테스트: QMenu.exec 가짜 함수로 대체
+from PySide6.QtWidgets import QMenu
+dummy_menu = QMenu()
+dummy_menu_open_val = None
+
+
+def fake_menu_exec(pos=None):
+    global dummy_menu_open_val
+    dummy_menu_open_val = w._menu_open
+    return None
+
+
+dummy_menu.exec = fake_menu_exec
+w._exec_menu(dummy_menu, QPoint(0, 0))
+check(dummy_menu_open_val == 1 and w._menu_open == 0,
+      f"_exec_menu 실행 중 _menu_open == 1, 종료 후 0 (중간={dummy_menu_open_val}, 끝={w._menu_open})")
+
+# 2. _menu_open 이 1 일 때 keep_topmost 호출 방지
+import core.win32 as win32_mod
+topmost_calls = []
+orig_keep_topmost = win32_mod.keep_topmost
+win32_mod.keep_topmost = lambda hwnd, enable: topmost_calls.append((hwnd, enable))
+try:
+    w.config.always_on_top = True
+    w._native_ready = True
+    w._dialog_open.clear()
+
+    topmost_calls.clear()
+    w._menu_open = 1
+    w._on_live_tick()
+    check(len(topmost_calls) == 0, f"_menu_open == 1 일 때 keep_topmost 미호출 ({len(topmost_calls)}회)")
+
+    topmost_calls.clear()
+    w._menu_open = 0
+    w._on_live_tick()
+    check(len(topmost_calls) == 1, f"_menu_open == 0 일 때 keep_topmost 정상 호출 ({len(topmost_calls)}회)")
+finally:
+    win32_mod.keep_topmost = orig_keep_topmost
+    w._menu_open = 0
+
+# 3. 자동 전환 및 수동 선택 프로필 유지 (manual hold)
+from core.app_detector import AppDetector, _is_own_pid
+import os
+check(_is_own_pid(os.getpid()) is True and _is_own_pid(9999999) is False,
+      "_is_own_pid PID 검증 정상 (자기 자신 True, 타 PID False)")
+
+# 프로필 설정: 기존 profile_browser (chrome.exe 타겟)와 profile_default 준비
+w.config.auto_switch_profile = True
+w._dialog_open.clear()
+w._menu_open = 0
+chrome_pid = "profile_browser"
+w.current_profile_id = "profile_default"
+w.last_detected_key = None
+w._manual_hold_exe = None
+w._last_external_exe = ""
+
+# 1) ("chrome.exe", "A") -> 크롬 프로필로 자동 전환
+AppDetector.get_foreground_app = lambda: ("chrome.exe", "A", 1234)
+w._on_tracker_tick()
+check(w.current_profile_id == chrome_pid, f"1) 크롬 포커스 시 크롬 프로필 자동 전환 ({w.current_profile_id})")
+
+# 2) 수동으로 기본 프로필 선택 후 ("chrome.exe", "B") -> 기본 프로필 유지
+w.switch_profile("profile_default", manual=True)
+check(w.current_profile_id == "profile_default" and w._manual_hold_exe == "chrome.exe",
+      f"2-1) 수동 전환 시 _manual_hold_exe 설정됨 (hold={w._manual_hold_exe})")
+AppDetector.get_foreground_app = lambda: ("chrome.exe", "B", 1234)
+w._on_tracker_tick()
+check(w.current_profile_id == "profile_default",
+      f"2-2) 같은 exe 내 창 제목 변경 시 수동 프로필 유지 ({w.current_profile_id})")
+
+# 3) 다른 프로그램 ("notepad.exe", "C") -> hold 해제 및 자동 전환 (기본 프로필)
+AppDetector.get_foreground_app = lambda: ("notepad.exe", "C", 5678)
+w._on_tracker_tick()
+check(w._manual_hold_exe is None and w.current_profile_id == "profile_default",
+      "3) 다른 프로그램 포커스 시 _manual_hold_exe 초기화됨")
+
+# 4) 다시 크롬 포커스 ("chrome.exe", "D") -> 크롬 프로필로 자동 전환
+AppDetector.get_foreground_app = lambda: ("chrome.exe", "D", 1234)
+w._on_tracker_tick()
+check(w.current_profile_id == chrome_pid,
+      f"4) 다시 크롬 포커스 시 크롬 프로필로 정상 자동 전환 ({w.current_profile_id})")
+
 passed = sum(results)
 print(f"\n결과: {passed} / {len(results)} 통과")
 w.hotkey.unregister()
