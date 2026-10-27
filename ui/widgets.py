@@ -15,9 +15,10 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractButton, QPushButton, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QSizePolicy, QLineEdit, QComboBox, QMenu, QSpinBox,
+    QSizePolicy, QLineEdit, QComboBox, QMenu, QSpinBox, QColorDialog,
 )
 
+from models.config_model import clean_custom_colors
 from ui import theme
 from ui.theme import T, tint_colors
 from ui.glass import (
@@ -406,13 +407,20 @@ class SegmentedTabs(QWidget):
 class ColorChips(QWidget):
     """유리 색을 고르는 동그란 칩 줄"""
 
+    ADD_KEY = "__add__"
+
     changed = Signal(str)
+    custom_added = Signal(str)
+    custom_removed = Signal(str)
 
     def __init__(self, parent=None, mode: str = "tint"):
         super().__init__(parent)
         self.mode = mode     # 'tint' = 유리 색, 'icon' = 아이콘 색
         self.table = theme.TINTS if mode == "tint" else theme.ICON_COLORS
-        self.keys = list(theme.BUTTON_TINT_KEYS) if mode == "tint" else list(self.table.keys())
+        self.base_keys = list(theme.BUTTON_TINT_KEYS) if mode == "tint" else list(self.table.keys())
+        self.custom = []
+        self._temp = None
+        self.keys = list(self.base_keys) + [self.ADD_KEY]
         self.current = self.keys[0]
         self._hover = -1
         self._pop = _Anim(self, 420)
@@ -424,6 +432,19 @@ class ColorChips(QWidget):
         self.cols = max(4, len(self.keys))
         self.setMinimumWidth(4 * (self.chip + self.gap))
         self._update_layout()
+
+    def set_custom(self, colors):
+        self.custom = clean_custom_colors(colors)
+        self._rebuild_keys()
+
+    def _rebuild_keys(self):
+        if theme.is_hex_color(self.current) and self.current not in self.custom:
+            self._temp = self.current
+        else:
+            self._temp = None
+        self.keys = self.base_keys + self.custom + ([self._temp] if self._temp and self._temp not in self.custom else []) + [self.ADD_KEY]
+        self._update_layout()
+        self.update()
 
     def _update_layout(self):
         rows = (len(self.keys) + self.cols - 1) // self.cols
@@ -437,8 +458,49 @@ class ColorChips(QWidget):
         super().resizeEvent(e)
 
     def set_current(self, key: str):
-        self.current = key if key in self.keys else self.keys[0]
+        if key == self.ADD_KEY:
+            self.current = self.base_keys[0]
+        elif key in self.keys:
+            self.current = key
+        elif theme.is_hex_color(key):
+            self.current = key
+            self._rebuild_keys()
+        else:
+            self.current = self.base_keys[0]
         self.update()
+
+    def _pick_custom(self):
+        initial = QColor(self.current if theme.is_hex_color(self.current) else "#4f8cff")
+        c = QColorDialog.getColor(initial, self.window(), "색 고르기")
+        if c.isValid():
+            self.add_custom(c.name().lower())
+
+    def add_custom(self, hex_color: str):
+        if not theme.is_hex_color(hex_color):
+            return
+        hex_color = hex_color.lower()
+        self.custom = clean_custom_colors([hex_color] + self.custom)
+        self.current = hex_color
+        self._rebuild_keys()
+        self.custom_added.emit(hex_color)
+        self.changed.emit(self.current)
+
+    def remove_custom(self, hex_color: str):
+        prev = self.current
+        self.custom = [c for c in self.custom if c.lower() != hex_color.lower()]
+        if self.current.lower() == hex_color.lower():
+            self.current = self.base_keys[0]
+        self._rebuild_keys()
+        self.custom_removed.emit(hex_color)
+        if self.current != prev:
+            self.changed.emit(self.current)
+
+    def _tip(self, key: str) -> str:
+        if theme.is_hex_color(key):
+            return f"내 색 {key}"
+        if key == self.ADD_KEY:
+            return "색 직접 고르기"
+        return self.table.get(key, ("",))[0]
 
     def _rect(self, i) -> QRectF:
         r, c = divmod(i, self.cols)
@@ -454,7 +516,7 @@ class ColorChips(QWidget):
         i = self._index_at(e.position())
         if i != self._hover:
             self._hover = i
-            self.setToolTip(self.table[self.keys[i]][0] if i >= 0 else "")
+            self.setToolTip(self._tip(self.keys[i]) if i >= 0 else "")
             self.update()
 
     def leaveEvent(self, e):
@@ -463,18 +525,34 @@ class ColorChips(QWidget):
 
     def mousePressEvent(self, e):
         i = self._index_at(e.position())
-        if i >= 0:
-            self.current = self.keys[i]
+        if i < 0:
+            return
+        key = self.keys[i]
+        if e.button() == Qt.LeftButton:
+            if key == self.ADD_KEY:
+                self._pick_custom()
+                return
+            self.current = key
             self._pop.value = 0.0
             self._pop.to(1.0, 420, QEasingCurve.OutBack)
             self.changed.emit(self.current)
+        elif e.button() == Qt.RightButton:
+            if key in self.custom and theme.is_hex_color(key):
+                self._context_menu(key, e.globalPosition().toPoint())
+
+    def _context_menu(self, key, pos):
+        menu = glass_menu(self)
+        act = menu.addAction("이 색 지우기")
+        chosen = menu.exec(pos)
+        if chosen is act:
+            self.remove_custom(key)
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         for i, key in enumerate(self.keys):
             r = self._rect(i)
-            sel = key == self.current
+            sel = (key != self.ADD_KEY and key == self.current)
             if sel:  # 고른 칩은 톡 튀어나오는 효과
                 k = (1 - self._pop.value) * 0.18
                 r = r.adjusted(r.width() * k, r.height() * k, -r.width() * k, -r.height() * k)
@@ -482,19 +560,29 @@ class ColorChips(QWidget):
                 p.setBrush(Qt.NoBrush)
                 p.drawEllipse(self._rect(i).adjusted(-3.5, -3.5, 3.5, 3.5))
             hov = 1.0 if i == self._hover else 0.0
-            if self.mode == "tint":
+            if key == self.ADD_KEY:
+                paint_glass(p, r, r.height() / 2, hover=hov, shadow_strength=0.6, rainbow=0.5, fill=0.8)
+                p.setFont(theme.dialog_font(int(self.chip * 0.6), QFont.Bold))
+                p.setPen(QColor(T().text_dim))
+                p.drawText(r, Qt.AlignCenter, "+")
+            elif self.mode == "tint":
                 paint_glass(p, r, r.height() / 2, tint=key, hover=hov, shadow_strength=0.6, rainbow=0.5, fill=0.8)
             else:
                 paint_glass(p, r, r.height() / 2, hover=hov, shadow_strength=0.6, rainbow=0.5, fill=0.8)
-                color = self.table[key][1]
-                if color is None:   # 자동: 'A' 표시
-                    p.setFont(theme.dialog_font(12, QFont.Bold))
-                    p.setPen(QColor(T().text_dim))
-                    p.drawText(r, Qt.AlignCenter, "A")
-                else:
+                if theme.is_hex_color(key):
                     p.setPen(QPen(QColor(0, 0, 0, 40), 1))
-                    p.setBrush(QColor(color))
+                    p.setBrush(QColor(key))
                     p.drawEllipse(r.center(), r.width() * 0.26, r.width() * 0.26)
+                else:
+                    color = self.table[key][1]
+                    if color is None:   # 자동: 'A' 표시
+                        p.setFont(theme.dialog_font(12, QFont.Bold))
+                        p.setPen(QColor(T().text_dim))
+                        p.drawText(r, Qt.AlignCenter, "A")
+                    else:
+                        p.setPen(QPen(QColor(0, 0, 0, 40), 1))
+                        p.setBrush(QColor(color))
+                        p.drawEllipse(r.center(), r.width() * 0.26, r.width() * 0.26)
 
 
 # ------------------------------------------------------------------ 유리 대화상자

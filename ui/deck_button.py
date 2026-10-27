@@ -54,10 +54,20 @@ def load_icon_pixmap(icon: str, px: int):
 
 
 def icon_color_for(data: DeckButtonData, fg: QColor) -> QColor:
-    entry = theme.ICON_COLORS.get(data.icon_color or "auto")
-    if not entry or entry[1] is None:
+    hex_value = theme.icon_color_hex(data.icon_color or "auto")
+    if not hex_value:
         return QColor(fg)
-    return QColor(entry[1])
+    return QColor(hex_value)
+
+
+def label_color(data: DeckButtonData, face: QColor, fg: QColor) -> QColor:
+    """버튼 글자색. 아이콘 색을 정했으면 글자도 그 색(바탕에서 안 보이면 보정), 자동이면 기존 색."""
+    if (data.icon_color or "auto") in ("", "auto"):
+        return QColor(fg)
+    hex_value = theme.icon_color_hex(data.icon_color)
+    if not hex_value:
+        return QColor(fg)
+    return theme.readable_on(QColor(hex_value), face)
 
 
 def paint_button_icon(p: QPainter, data: DeckButtonData, rect: QRectF, fg: QColor, style: str,
@@ -439,6 +449,13 @@ class DeckButtonWidget(QWidget):
 
         colors = tint_colors(tint)
         fg = colors[2] if colors else QColor(T().text)
+        if colors:
+            face = QColor((colors[0].red() + colors[1].red()) // 2,
+                          (colors[0].green() + colors[1].green()) // 2,
+                          (colors[0].blue() + colors[1].blue()) // 2)
+        else:
+            face = QColor(T().base)
+        fg = label_color(d, face, fg)
         unit = min(rect.width(), rect.height())
         wide = rect.width() > rect.height() * 1.4
         halo = QColor(0, 0, 0, 60) if (colors or T().dark) else QColor(255, 255, 255, 120)

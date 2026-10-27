@@ -217,6 +217,7 @@ class SettingsDialog(GlassDialog):
         self.storage = storage or StorageService()
         self.restore_path = None
         self._orig_font_size = getattr(config, "font_size", "M")
+        self._orig_ui_font = getattr(config, "ui_font", "")
         self._loading = True
         self.style_cards: Dict[str, StyleCard] = {}
 
@@ -250,6 +251,10 @@ class SettingsDialog(GlassDialog):
         if getattr(self, "_orig_font_size", None):
             self.config.font_size = self._orig_font_size
             theme.apply_ui_scale(self._orig_font_size)
+        if hasattr(self, "_orig_ui_font"):
+            self.config.ui_font = self._orig_ui_font
+            theme.set_ui_font(self._orig_ui_font)
+            theme.apply_ui_scale(getattr(self.config, "font_size", "M"))
         super().reject()
 
     def _changed(self, *_):
@@ -312,6 +317,24 @@ class SettingsDialog(GlassDialog):
         font_row.addWidget(self.font_tabs, 1)
         left_bot.addLayout(font_row)
 
+        font_family_box = QVBoxLayout()
+        font_family_box.setSpacing(4)
+        font_family_box.addWidget(QLabel("글꼴"))
+        self.font_combo = no_wheel(QComboBox())
+        self.font_combo.addItem(f"기본 ({theme.DEFAULT_UI_FONT})", "")
+        for fam in theme.korean_font_families():
+            self.font_combo.addItem(fam, fam)
+        cur_font = getattr(c, "ui_font", "") or ""
+        f_idx = self.font_combo.findData(cur_font)
+        self.font_combo.setCurrentIndex(f_idx if f_idx >= 0 else 0)
+        self.font_combo.currentIndexChanged.connect(self._on_ui_font_changed)
+        font_family_box.addWidget(self.font_combo)
+
+        self.font_preview_lab = QLabel("가나다라 ABC 123 Virtual Deck")
+        self._update_font_preview(self.font_combo.currentData() or "")
+        font_family_box.addWidget(self.font_preview_lab)
+        left_bot.addLayout(font_family_box)
+
         left_bot.addStretch(1)
         bot_cols.addLayout(left_bot, 1)
 
@@ -363,6 +386,19 @@ class SettingsDialog(GlassDialog):
         self.config.apply_theme_dict(data)
         self._sync_controls()
         self._changed()
+
+    def _update_font_preview(self, font_name: str = ""):
+        actual_font = font_name if font_name else theme.DEFAULT_UI_FONT
+        self.font_preview_lab.setStyleSheet(
+            f"font-family: '{actual_font}'; font-size: 16px; font-weight: 600;"
+        )
+
+    def _on_ui_font_changed(self, idx: int):
+        data = self.font_combo.currentData() or ""
+        theme.set_ui_font(data)
+        theme.apply_ui_scale(getattr(self.config, "font_size", "M"))
+        self._set("ui_font", data)
+        self._update_font_preview(data)
 
     def _on_font_size_tab(self, idx: int):
         key = self.font_size_keys[idx]
@@ -825,6 +861,14 @@ class SettingsDialog(GlassDialog):
             cur_fs = getattr(c, "font_size", "M")
             cur_fs_idx = self.font_size_keys.index(cur_fs) if cur_fs in self.font_size_keys else 1
             self.font_tabs.setCurrentIndex(cur_fs_idx, animate=False)
+        if hasattr(self, "font_combo"):
+            self.font_combo.blockSignals(True)
+            target = getattr(c, "ui_font", "") or ""
+            idx = self.font_combo.findData(target)
+            self.font_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            self.font_combo.blockSignals(False)
+            if hasattr(self, "font_preview_lab"):
+                self._update_font_preview(self.font_combo.currentData() or "")
         if hasattr(self, "opacity"):
             self.opacity.setValue(int(c.opacity * 100))
             self.opacity_lab.setText(f"{int(c.opacity * 100)}%")

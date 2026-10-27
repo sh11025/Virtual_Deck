@@ -15,6 +15,7 @@ data/config.json*
 data/backups/
 data/cache/
 data/.running.lock
+data/crash.log*
 
 # 기타 보관용 폴더
 _backup_원본/

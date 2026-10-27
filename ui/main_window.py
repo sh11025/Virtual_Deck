@@ -195,6 +195,7 @@ class MainWindow(QWidget):
         self.storage = storage_service
         self.config, self.profiles, self.current_profile_id = self.storage.load_data()
         theme.set_theme(self.config.theme)
+        theme.set_ui_font(self.config.ui_font)
         QApplication.instance().setStyleSheet(theme.get_qss())
         if win32.IS_WINDOWS:
             self.config.auto_start = is_autostart_enabled()
@@ -456,6 +457,21 @@ class MainWindow(QWidget):
 
     def save(self):
         self.storage.save_data(self.config, self.profiles, self.current_profile_id)
+
+    def add_custom_color(self, hex_color: str):
+        from models.config_model import clean_custom_colors
+        self.config.custom_colors = clean_custom_colors([hex_color] + list(self.config.custom_colors))
+        try:
+            self.save()
+        except Exception:
+            pass
+
+    def remove_custom_color(self, hex_color: str):
+        self.config.custom_colors = [c for c in self.config.custom_colors if c != hex_color]
+        try:
+            self.save()
+        except Exception:
+            pass
 
     # ================================================================ 그리드
     def _rebuild_grid(self):
@@ -1207,6 +1223,7 @@ class MainWindow(QWidget):
             elif new.rows < before.rows or new.cols < before.cols:
                 self.storage.prune_outside(self.profiles, new.rows, new.cols)
             self._carry_runtime_fields(new)
+            theme.set_ui_font(new.ui_font)
             self.apply_config(new)
             if new.auto_start != is_autostart_enabled():
                 if not set_autostart(new.auto_start) and win32.IS_WINDOWS:
@@ -1220,6 +1237,7 @@ class MainWindow(QWidget):
         def on_rejected():
             before.user_themes = dlg.config.user_themes   # 저장한 테마는 취소해도 남김
             self._carry_runtime_fields(before)
+            theme.set_ui_font(before.ui_font)
             self.apply_config(before)
             self.save()
             self._settings_dlg = None
@@ -1253,11 +1271,17 @@ class MainWindow(QWidget):
         old = self.config
         self.config = cfg
         theme_changed = theme.T().name != cfg.theme
-        if theme_changed:
-            theme.set_theme(cfg.theme)
+        font_changed = getattr(old, "ui_font", "") != getattr(cfg, "ui_font", "")
+        if font_changed:
+            theme.set_ui_font(cfg.ui_font)
+        if theme_changed or font_changed:
+            if theme_changed:
+                theme.set_theme(cfg.theme)
             QApplication.instance().setStyleSheet(theme.get_qss())
             from ui.glass import clear_glass_cache
             clear_glass_cache()
+            for btn in self.button_widgets.values():
+                btn.update()
         if old.always_on_top != cfg.always_on_top and self._native_ready:
             pos = self.pos()
             self.setWindowFlag(Qt.WindowStaysOnTopHint, cfg.always_on_top)

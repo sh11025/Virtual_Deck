@@ -1072,6 +1072,192 @@ check(not any("app:" in b.action_data for b in prof_mixed.buttons.values()), "ap
 
 AF_MOD.find_app = orig_find
 
+# ====================================================================
+section("색·글꼴")
+from PySide6.QtGui import QColor  # noqa: E402
+
+# 1. 색 이름 검사
+new_tints = ["teal", "lime", "navy", "brown", "gray", "black", "white"]
+check(len(theme.BUTTON_TINT_KEYS) == 18 and all(k in theme.TINTS for k in theme.BUTTON_TINT_KEYS),
+      f"BUTTON_TINT_KEYS 18개이고 모두 TINTS에 있음 ({len(theme.BUTTON_TINT_KEYS)}개)")
+check(all(k in theme.TINTS for k in new_tints), f"새 틴트 {new_tints}가 모두 TINTS에 있음")
+check(all(theme.tint_colors(k) is not None and len(theme.tint_colors(k)) == 3 for k in new_tints),
+      "새 틴트들의 tint_colors가 각각 투명이 아닌 3색을 돌려줌")
+new_icons = ["red", "teal", "lime", "sky", "gray", "black"]
+check(all(k in theme.ICON_COLORS for k in new_icons), f"ICON_COLORS에 {new_icons}가 있음")
+
+# 2. hex 검사
+check(theme.is_hex_color("#a1B2c3") is True and not theme.is_hex_color("#12345") and not theme.is_hex_color("red") and not theme.is_hex_color(None),
+      "is_hex_color hex 검증 (#a1B2c3 True, #12345/red/None False)")
+check(theme.tint_colors("#ffe66d")[2].name() == "#1f2937", "밝은 hex 틴트 글자색 진한 색(#1f2937)")
+check(theme.tint_colors("#1b2a49")[2].name() == "#ffffff", "어두운 hex 틴트 글자색 흰색(#ffffff)")
+check(theme.tint_colors("nonexist") is None and theme.tint_colors("clear") is None, "없는 틴트와 clear는 None")
+check(theme.glass_tint_hex("#123456") == "#123456", "glass_tint_hex hex 반환")
+check(theme.icon_color_hex("#112233") == "#112233" and theme.icon_color_hex("auto") is None, "icon_color_hex 동작")
+
+# 3. config.custom_colors 검사
+from models.config_model import clean_custom_colors  # noqa: E402
+check(clean_custom_colors(["#ABCDEF", "#abcdef", "bad", "#123456"]) == ["#abcdef", "#123456"],
+      "clean_custom_colors 소문자/중복제거/유효값 정리")
+check(len(clean_custom_colors([f"#{i:06x}" for i in range(15)])) == 12, "clean_custom_colors 최대 12개 제한")
+check(AppConfig.from_dict({"custom_colors": ["#ABCDEF", "x"]}).custom_colors == ["#abcdef"],
+      "AppConfig.from_dict custom_colors 정리")
+c_custom_test = AppConfig(custom_colors=["#112233", "#445566"])
+check(AppConfig.from_dict(c_custom_test.to_dict()).custom_colors == ["#112233", "#445566"],
+      "custom_colors to_dict 후 from_dict 유지")
+
+# 4. ui_font 검사
+check(AppConfig.from_dict({"ui_font": 123}).ui_font == "" and AppConfig.from_dict({"ui_font": " Foo "}).ui_font == "Foo",
+      "AppConfig ui_font 공백제거 및 비문자열 처리")
+
+orig_qf = theme.QFontDatabase
+orig_ui_font = theme.UI_FONT
+class FakeFontDatabase:
+    Korean = 1
+    Any = 0
+    class WritingSystem:
+        Korean = 1
+        Any = 0
+    @staticmethod
+    def families(*args, **kwargs):
+        return ["Pretendard", "Fake Font", "@Vertical Font"]
+
+theme.QFontDatabase = FakeFontDatabase
+try:
+    check(theme.set_ui_font("Fake Font") == "Fake Font", "set_ui_font 설치된 글꼴 설정")
+    check(theme.set_ui_font("없는글꼴XYZ") == theme.DEFAULT_UI_FONT, "set_ui_font 없는 글꼴 기본값 복구")
+    check(theme.set_ui_font("") == theme.DEFAULT_UI_FONT, "set_ui_font 빈 글꼴 기본값 복구")
+    k_fams = theme.korean_font_families()
+    check(theme.DEFAULT_UI_FONT not in k_fams and not any(f.startswith("@") for f in k_fams) and k_fams == sorted(k_fams) and "Fake Font" in k_fams,
+          "korean_font_families DEFAULT_UI_FONT 및 @ 제외 및 정렬 확인")
+finally:
+    theme.QFontDatabase = orig_qf
+    theme.UI_FONT = orig_ui_font
+
+# 5. ColorChips 위젯 동작 검사
+from ui.widgets import ColorChips  # noqa: E402
+chips = ColorChips()
+n = len(chips.keys)
+check(n == 19, f"ColorChips 기본 키 개수 19개 ({n}개)")
+added_signals = []
+chips.custom_added.connect(added_signals.append)
+chips.add_custom("#ff8800")
+check(len(chips.keys) == n + 1 and chips.current == "#ff8800" and chips.keys[-1] == "__add__" and chips.keys[-2] == "#ff8800" and chips.custom == ["#ff8800"],
+      "add_custom 후 키/현재선택/custom 배열 확인")
+check(added_signals == ["#ff8800"], "custom_added 시그널 1회 발생")
+chips.add_custom("#ff8800")
+check(len(chips.custom) == 1, "동일 색상 재추가 시 custom 길이 1 유지")
+
+removed_signals = []
+chips.custom_removed.connect(removed_signals.append)
+chips.remove_custom("#ff8800")
+check(len(chips.keys) == n and chips.current == "clear" and chips.custom == [],
+      "remove_custom 후 키 수/현재선택(clear)/custom([]) 복구")
+check(removed_signals == ["#ff8800"], "custom_removed 시그널 발생")
+
+for i in range(15):
+    chips.add_custom(f"#{i:06x}")
+check(len(chips.custom) == 12, "ColorChips custom 최대 12개 제한")
+chips.add_custom("bad")
+check("bad" not in chips.custom, "유효하지 않은 색상 무시")
+
+chips_icon = ColorChips(mode="icon")
+chips_icon.set_current("#123456")
+check(chips_icon.current == "#123456" and chips_icon.keys[-2] == "#123456" and chips_icon.keys[-1] == "__add__",
+      "아이콘 모드 임시 hex 칩 확인")
+chips_icon.set_current("모르는이름")
+check(chips_icon.current == chips_icon.keys[0], "모르는 이름 선택 시 첫 번째 키 선택")
+
+# 6. ColorChips 가짜 선택창 검사
+import ui.widgets as widgets_mod  # noqa: E402
+orig_get_color = widgets_mod.QColorDialog.getColor
+try:
+    widgets_mod.QColorDialog.getColor = lambda *args, **kwargs: QColor("#34c759")
+    chips._pick_custom()
+    check(chips.current == "#34c759" and "#34c759" in chips.custom, "가짜 getColor 선택 색상 추가 및 선택")
+    cur_before = chips.current
+    custom_before = list(chips.custom)
+    widgets_mod.QColorDialog.getColor = lambda *args, **kwargs: QColor()
+    chips._pick_custom()
+    check(chips.current == cur_before and chips.custom == custom_before, "getColor 취소 시 색상 변경 없음")
+finally:
+    widgets_mod.QColorDialog.getColor = orig_get_color
+
+# 7. 오른쪽 클릭 메뉴 검사
+orig_glass_menu = widgets_mod.glass_menu
+sentinel_act = object()
+exec_return = sentinel_act
+class FakeMenu:
+    def addAction(self, text):
+        return sentinel_act
+    def exec(self, pos):
+        return exec_return
+
+try:
+    widgets_mod.glass_menu = lambda parent=None: FakeMenu()
+    exec_return = sentinel_act
+    chips._context_menu("#34c759", QPoint(0, 0))
+    check("#34c759" not in chips.custom, "우클릭 메뉴 선택 시 custom 색상 삭제")
+    chips.add_custom("#34c759")
+    exec_return = None
+    chips._context_menu("#34c759", QPoint(0, 0))
+    check("#34c759" in chips.custom, "우클릭 메뉴 취소 시 custom 색상 유지")
+finally:
+    widgets_mod.glass_menu = orig_glass_menu
+
+# 8. 편집창 연동 검사
+from ui.button_editor_dialog import ButtonEditorDialog  # noqa: E402
+bedit_btn = DeckButtonData(id="btn_custom_test", row=0, col=0, name="색테스트")
+bedit_dlg = ButtonEditorDialog(bedit_btn, parent=w, modeless=True)
+try:
+    bedit_dlg.colors.add_custom("#aa5500")
+    check(len(w.config.custom_colors) > 0 and w.config.custom_colors[0] == "#aa5500",
+          "편집창 색 추가 시 w.config.custom_colors 에 반영")
+    check("#aa5500" in bedit_dlg.icon_colors.custom, "다른 쪽 칩(icon_colors)에도 커스텀 색상 반영")
+    bedit_dlg.icon_colors.remove_custom("#aa5500")
+    check("#aa5500" not in w.config.custom_colors, "편집창 색 삭제 시 w.config.custom_colors 에서 제거")
+    check("#aa5500" not in bedit_dlg.colors.custom, "다른 쪽 칩(colors)에서도 커스텀 색상 제거")
+finally:
+    bedit_dlg.close()
+
+# 9. 글자색 label_color 및 명암비 검사
+from ui.deck_button import label_color  # noqa: E402
+d_lbl = DeckButtonData(id="btn_lbl", name="라벨", icon_color="auto")
+check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#112233", "아이콘 색 auto 일 때 글자색 fg 유지")
+d_lbl.icon_color = "#1b2a49"
+check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#1b2a49", "어두운 아이콘 색 글자색 적용")
+d_lbl.icon_color = "#ffe66d"
+check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#1f2937", "밝은 아이콘 색은 흰 배경에서 가독성 보정(#1f2937)")
+d_lbl.icon_color = "모르는이름"
+check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#112233", "모르는 아이콘 색 이름은 fg 유지")
+check(round(theme.contrast_ratio(QColor("#ffffff"), QColor("#000000")), 1) == 21.0, "theme.contrast_ratio(흰,검정) == 21.0")
+check(theme.readable_on(QColor("#ffe66d"), QColor("#ffffff")).name() == "#1f2937", "readable_on 흰 바탕 위 노랑 보정")
+check(theme.readable_on(QColor("#1b2a49"), QColor("#ffffff")).name() == "#1b2a49", "readable_on 흰 바탕 위 남색 유지")
+
+# 10. 설정창 글꼴 드롭다운 및 미리보기 라벨 검사
+from ui.settings_dialog import SettingsDialog  # noqa: E402
+cfg_set = w.config.copy()
+cfg_set.ui_font = ""
+sdlg = SettingsDialog(cfg_set, storage=w.storage, parent=w, modeless=True)
+try:
+    check(hasattr(sdlg, "font_combo") and hasattr(sdlg, "font_preview_lab"), "설정창에 font_combo 와 font_preview_lab 존재")
+    check(sdlg.font_combo.currentData() == "" and sdlg.font_combo.count() >= 1, "font_combo 첫 항목 currentData == '' 및 항목 1개 이상")
+    if sdlg.font_combo.count() > 1:
+        target_font = sdlg.font_combo.itemData(1)
+        cfg_with_font = w.config.copy()
+        cfg_with_font.ui_font = target_font
+        sdlg_font = SettingsDialog(cfg_with_font, storage=w.storage, parent=w, modeless=True)
+        check(sdlg_font.font_combo.currentData() == target_font, "설정된 글꼴이 font_combo 에서 선택됨")
+        sdlg_font.close()
+    cfg_bad = w.config.copy()
+    cfg_bad.ui_font = "없는글꼴ABCXYZ"
+    sdlg_bad = SettingsDialog(cfg_bad, storage=w.storage, parent=w, modeless=True)
+    check(sdlg_bad.font_combo.currentData() == "", "없는 글꼴은 '기본' 항목 선택")
+    sdlg_bad.close()
+finally:
+    sdlg.close()
+    theme.set_ui_font("")
+
 passed = sum(results)
 print(f"\n결과: {passed} / {len(results)} 통과")
 w.hotkey.unregister()

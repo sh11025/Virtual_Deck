@@ -3,8 +3,9 @@
 그리드 크기, 모양, 배경, 동작 방식 등 프로그램 전체 설정을 담습니다.
 """
 
+import re
 from dataclasses import dataclass, asdict, fields, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 # 버튼 크기 규격: 이름 → (버튼 크기, 권장 간격)
 SIZE_PRESETS = {
@@ -14,6 +15,18 @@ SIZE_PRESETS = {
     "L": (114, 7),
     "EX": (134, 8),
 }
+
+
+def clean_custom_colors(values) -> List[str]:
+    """내 색 목록 정리: '#rrggbb' 만, 소문자, 중복 제거, 앞에서부터 최대 12개"""
+    out = []
+    if isinstance(values, list):
+        for v in values:
+            if isinstance(v, str) and re.match(r"^#[0-9a-fA-F]{6}$", v):
+                v = v.lower()
+                if v not in out:
+                    out.append(v)
+    return out[:12]
 
 
 @dataclass
@@ -69,6 +82,8 @@ class AppConfig:
     backup_days: int = 7            # 자동 백업 보관 일수
     pycaw_prompt: bool = True       # pycaw 가 없을 때 설치할지 물어보기
     user_themes: Dict[str, Any] = field(default_factory=dict)   # 내가 저장한 덱 테마
+    custom_colors: List[str] = field(default_factory=list)   # 내가 고른 색 (#rrggbb, 최대 12개)
+    ui_font: str = ""   # 화면 글꼴 (비면 기본 Pretendard)
     tray_hint_shown: bool = False
 
     def copy(self) -> "AppConfig":
@@ -110,10 +125,17 @@ class AppConfig:
             cfg.icon_style = "line"
         if getattr(cfg, "font_size", None) not in ("S", "M", "L"):
             cfg.font_size = "M"
+        if not isinstance(getattr(cfg, "ui_font", None), str):
+            cfg.ui_font = ""
+        else:
+            cfg.ui_font = cfg.ui_font.strip()
+            if len(cfg.ui_font) > 80:
+                cfg.ui_font = ""
         cfg.hold_ms = max(300, min(1500, int(cfg.hold_ms)))
         cfg.backup_days = max(1, min(60, int(cfg.backup_days)))
         if not isinstance(cfg.user_themes, dict):
             cfg.user_themes = {}
+        cfg.custom_colors = clean_custom_colors(cfg.custom_colors)
         if cfg.theme not in ("light", "dark"):
             cfg.theme = "light"
         cfg.rows = max(1, min(8, int(cfg.rows)))
@@ -130,7 +152,7 @@ class AppConfig:
     THEME_KEYS = ("theme", "icon_style", "show_labels", "opacity", "bg_type", "glass_clarity",
                   "glass_blur", "glass_frost", "glass_tint",
                   "bg_color", "bg_gradient_start", "bg_gradient_end", "bg_gradient_dir",
-                  "bg_image_path", "bg_image_zoom", "bg_image_x", "bg_image_y")
+                  "bg_image_path", "bg_image_zoom", "bg_image_x", "bg_image_y", "ui_font")
 
     def set_clarity(self, val: int) -> None:
         """유리 맑기(0=가장 맑음 ~ 100=가장 뿌얌)를 설정하고 blur 및 frost를 연동 계산합니다."""

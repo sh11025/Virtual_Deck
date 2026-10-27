@@ -196,6 +196,18 @@ def run_all_dialog_checks(scale_tag="scale_M", scale_key="M"):
             report_check(f"버튼설정_{action_type}", errs)
     ed.close()
 
+    # 내 색 12개 추가 상태 검사
+    custom_12 = [f"#{i*20:02x}{i*15:02x}{255-i*10:02x}" for i in range(12)]
+    ed_custom = ButtonEditorDialog(btn_model, parent=main_win)
+    ed_custom.colors.set_custom(custom_12)
+    ed_custom.icon_colors.set_custom(custom_12)
+    ed_custom.show()
+    wait_ui(250)
+    errs = inspect_dialog(ed_custom, "버튼설정_내색12개")
+    save_snapshot(ed_custom, f"ButtonEditor_내색12개_{scale_tag}")
+    report_check("버튼설정_내색12개", errs)
+    ed_custom.close()
+
     # --- 3. ProfileManagerDialog & SampleProfilesDialog 검사 ---
     pm = ProfileManagerDialog(main_win.profiles, main_win.current_profile_id, st, parent=main_win)
     pm.show()

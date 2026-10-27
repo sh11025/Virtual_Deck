@@ -792,8 +792,23 @@ class ButtonEditorDialog(GlassDialog):
         self.colors = ColorChips()
         self.colors.changed.connect(lambda _: self._update_preview())
         colors_box.addWidget(self.colors)
+
+        parent = self.parent()
+        custom_list = (
+            list(parent.config.custom_colors)
+            if parent and hasattr(parent, "config") and hasattr(parent, "add_custom_color")
+            else []
+        )
+        self.icon_colors.set_custom(custom_list)
+        self.colors.set_custom(custom_list)
+
+        self.colors.custom_added.connect(self._on_custom_added)
+        self.icon_colors.custom_added.connect(self._on_custom_added)
+        self.colors.custom_removed.connect(self._on_custom_removed)
+        self.icon_colors.custom_removed.connect(self._on_custom_removed)
+
         right_v.addLayout(colors_box)
-        right_v.addWidget(hint_label("아이콘 색의 ‘A’는 버튼 색에 맞춰 자동으로 고릅니다."))
+        right_v.addWidget(hint_label("‘A’는 버튼 색에 맞춰 자동으로 골라요. + 로 원하는 색을 직접 고를 수 있어요."))
         right_v.addStretch(1)
 
         self.body.addLayout(cols_lay, 1)
@@ -845,6 +860,22 @@ class ButtonEditorDialog(GlassDialog):
             else:
                 combo.setCurrentIndex(0)
             combo.blockSignals(False)
+
+    def _on_custom_added(self, hex_color: str):
+        for chip in (self.colors, self.icon_colors):
+            if not chip.custom or chip.custom[0] != hex_color:
+                chip.set_custom([hex_color] + chip.custom)
+        parent = self.parent()
+        if parent and hasattr(parent, "add_custom_color"):
+            parent.add_custom_color(hex_color)
+
+    def _on_custom_removed(self, hex_color: str):
+        for chip in (self.colors, self.icon_colors):
+            if hex_color in chip.custom:
+                chip.set_custom([c for c in chip.custom if c != hex_color])
+        parent = self.parent()
+        if parent and hasattr(parent, "remove_custom_color"):
+            parent.remove_custom_color(hex_color)
 
     # ------------------------------------------------------------ 불러오기
     def _load(self):

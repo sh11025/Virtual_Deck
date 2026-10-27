@@ -5,6 +5,7 @@
 """
 
 import os
+import re
 from dataclasses import dataclass
 
 from PySide6.QtGui import QColor, QFontDatabase, QFont
@@ -67,6 +68,13 @@ TINTS = {
     "pink": ("분홍", "#ffb6d3", "#e8458f", "#ffffff"),
     "red": ("빨강", "#ffa3a3", "#e23a3d", "#ffffff"),
     "yellow": ("노랑", "#ffe88f", "#f2ae00", "#3b2a00"),
+    "teal": ("청록", "#7eeaea", "#0e9aa7", "#ffffff"),
+    "lime": ("연두", "#d6f58a", "#7ac70c", "#1f2937"),
+    "navy": ("남색", "#7f9bd6", "#1e3a8a", "#ffffff"),
+    "brown": ("갈색", "#d9b08c", "#8b5a2b", "#ffffff"),
+    "gray": ("회색", "#cbd5e1", "#64748b", "#ffffff"),
+    "black": ("검정", "#6b7280", "#111827", "#ffffff"),
+    "white": ("흰색", "#ffffff", "#dfe6f0", "#1f2937"),
     # 색 유리 스타일용 틴트
     "sky": ("하늘", "#6cb8ff", "#257fe6", "#ffffff"),
     "sunset": ("노을", "#ffa085", "#f25542", "#ffffff"),
@@ -80,8 +88,8 @@ GLASS_TINT_COLORS = {
     "forest": "#2e9a58",
 }
 
-# 버튼 편집창의 '유리 색' 칩에 보여 줄 색 이름(배경 전용 sky/sunset/forest 제외)
-BUTTON_TINT_KEYS = ("clear", "orange", "blue", "mint", "purple", "pink", "red", "yellow")
+# 버튼 편집창의 '유리 색' 칩에 보여 줄 색 이름
+BUTTON_TINT_KEYS = ("clear", "orange", "yellow", "lime", "forest", "mint", "teal", "sky", "blue", "navy", "purple", "pink", "sunset", "red", "brown", "gray", "black", "white")
 
 # 켜짐(토글 ON) 표시 색: 민트 틴트의 아래쪽 진한 색
 TOGGLE_ON_COLOR = TINTS["mint"][2]
@@ -89,6 +97,8 @@ TOGGLE_ON_COLOR = TINTS["mint"][2]
 
 def glass_tint_hex(name: str, default: str = "#3894f0") -> str:
     """배경 유리 스타일 이름에 해당하는 대표 색(#rrggbb)을 돌려줍니다."""
+    if is_hex_color(name):
+        return name
     if name in GLASS_TINT_COLORS:
         return GLASS_TINT_COLORS[name]
     data = TINTS.get(name)
@@ -99,13 +109,67 @@ ICON_COLORS = {
     "auto": ("자동", None),
     "white": ("흰색", "#ffffff"),
     "ink": ("진한 색", "#1e293b"),
-    "blue": ("하늘", "#2f86f6"),
+    "blue": ("파랑", "#2f86f6"),
     "mint": ("민트", "#0fb882"),
     "orange": ("주황", "#f56a1f"),
     "pink": ("분홍", "#ec4899"),
     "yellow": ("노랑", "#f2ae00"),
     "purple": ("보라", "#7c4dff"),
+    "red": ("빨강", "#ef4444"),
+    "teal": ("청록", "#0d9488"),
+    "lime": ("연두", "#65a30d"),
+    "sky": ("하늘색", "#0ea5e9"),
+    "gray": ("회색", "#64748b"),
+    "black": ("검정", "#0f172a"),
 }
+
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def is_hex_color(s) -> bool:
+    """'#rrggbb' 형태의 색인지 확인"""
+    return isinstance(s, str) and bool(_HEX_RE.match(s))
+
+
+def tint_from_hex(hex_color: str):
+    """직접 고른 색 하나로 유리 색 (위 색, 아래 색, 글자색) 을 만듭니다."""
+    base = QColor(hex_color)
+    top = QColor(int(base.red() + (255 - base.red()) * 0.35),
+                 int(base.green() + (255 - base.green()) * 0.35),
+                 int(base.blue() + (255 - base.blue()) * 0.35))
+    bottom = QColor(int(base.red() * 0.85), int(base.green() * 0.85), int(base.blue() * 0.85))
+    lum = (0.299 * bottom.red() + 0.587 * bottom.green() + 0.114 * bottom.blue()) / 255.0
+    text = QColor("#1f2937") if lum > 0.62 else QColor("#ffffff")
+    return top, bottom, text
+
+
+def icon_color_hex(name):
+    """아이콘 색 이름 또는 '#rrggbb' → '#rrggbb' (자동이거나 모르는 이름이면 None)"""
+    if is_hex_color(name):
+        return name
+    entry = ICON_COLORS.get(name or "auto")
+    return entry[1] if entry else None
+
+
+def contrast_ratio(c1: QColor, c2: QColor) -> float:
+    """두 색의 대비 비율 (WCAG 방식, 1.0 ~ 21.0)"""
+    def lum(c: QColor) -> float:
+        def ch(v):
+            v = v / 255.0
+            return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+        return 0.2126 * ch(c.red()) + 0.7152 * ch(c.green()) + 0.0722 * ch(c.blue())
+    a, b = lum(c1), lum(c2)
+    hi, lo = max(a, b), min(a, b)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def readable_on(color: QColor, background: QColor, min_ratio: float = 2.2) -> QColor:
+    """글자색이 바탕과 비슷해서 안 보이면 흰색/진한 색 중 대비가 큰 쪽으로 바꿉니다."""
+    if contrast_ratio(color, background) >= min_ratio:
+        return QColor(color)
+    white, dark = QColor("#ffffff"), QColor("#1f2937")
+    return white if contrast_ratio(white, background) >= contrast_ratio(dark, background) else dark
+
 
 _current = LIGHT
 
@@ -122,6 +186,8 @@ def T() -> Palette:
 
 def tint_colors(tint: str):
     """(위 색, 아래 색, 글자색) — 투명이면 None"""
+    if is_hex_color(tint):
+        return tint_from_hex(tint)
     data = TINTS.get(tint or "clear")
     if not data or data[1] is None:
         return None
@@ -130,12 +196,13 @@ def tint_colors(tint: str):
 
 # ------------------------------------------------------------------ 글꼴
 UI_FONT = "Pretendard"
+DEFAULT_UI_FONT = "Pretendard"
 EMOJI_FONTS = ["Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji"]
 
 
 def load_fonts() -> str:
     """프로그램에 포함된 Pretendard 글꼴을 등록합니다. 없으면 시스템 글꼴 사용."""
-    global UI_FONT
+    global UI_FONT, DEFAULT_UI_FONT
     folder = paths.fonts_dir()
     loaded = False
     if os.path.isdir(folder):
@@ -145,7 +212,68 @@ def load_fonts() -> str:
                     loaded = True
     if not loaded:
         UI_FONT = "Malgun Gothic" if os.name == "nt" else "Sans Serif"
+    DEFAULT_UI_FONT = UI_FONT
     return UI_FONT
+
+
+def _available_families() -> list[str]:
+    try:
+        fams = list(QFontDatabase.families())
+    except Exception:
+        fams = []
+    if len(fams) <= 1 and os.name == "nt":
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts")
+            for i in range(winreg.QueryInfoKey(key)[1]):
+                fname = winreg.EnumValue(key, i)[0].split(" (")[0].strip()
+                if fname and fname not in fams:
+                    fams.append(fname)
+        except Exception:
+            pass
+    return fams
+
+
+def set_ui_font(family: str) -> str:
+    """화면 글꼴을 바꿉니다. 비었거나 설치되지 않은 글꼴이면 기본 글꼴로 되돌립니다. 지금 쓰는 글꼴 이름을 돌려줍니다."""
+    global UI_FONT
+    name = (family or "").strip()
+    if name and (name in QFontDatabase.families() or name in _available_families()):
+        UI_FONT = name
+    else:
+        UI_FONT = DEFAULT_UI_FONT
+    return UI_FONT
+
+
+def korean_font_families() -> list[str]:
+    """한글 지원 글꼴 목록을 이름순으로 돌려줍니다. '@'로 시작하는 글꼴과 DEFAULT_UI_FONT는 제외합니다."""
+    fams = []
+    try:
+        ws = getattr(QFontDatabase, "Korean", None)
+        if ws is None:
+            ws = getattr(getattr(QFontDatabase, "WritingSystem", None), "Korean", None)
+        if ws is not None:
+            fams = list(QFontDatabase.families(ws))
+    except Exception:
+        fams = []
+    if not fams:
+        try:
+            fams = list(QFontDatabase.families())
+        except Exception:
+            fams = []
+    if not fams or (len(fams) == 1 and fams[0] == DEFAULT_UI_FONT):
+        fams = _available_families()
+    seen = set()
+    result = []
+    for f in fams:
+        f = f.strip()
+        if not f or f.startswith("@") or f == DEFAULT_UI_FONT:
+            continue
+        if f not in seen:
+            seen.add(f)
+            result.append(f)
+    result.sort()
+    return result
 
 
 def ui_font(size: float = 13, weight=QFont.Medium) -> QFont:
