@@ -563,11 +563,12 @@ class IconPicker(QWidget):
         self.theme_grid = ThemeIconGrid(style)
         self.theme_grid.picked.connect(self.picked)
         sc = QScrollArea()
+        sc.setObjectName("inner_scroll")
         sc.setWidgetResizable(True)
         sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         sc.setFrameShape(QFrame.NoFrame)
         sc.setWidget(self.theme_grid)
-        sc.setFixedHeight(184)
+        sc.setFixedHeight(170)
         self.stack.addWidget(sc)
 
         # 이모지
@@ -583,7 +584,14 @@ class IconPicker(QWidget):
         self.emoji_edit.textEdited.connect(lambda t: t.strip() and self.picked.emit(t.strip()))
         ev.addWidget(self.emoji_edit)
         ev.addStretch(1)
-        self.stack.addWidget(ew)
+        esc = QScrollArea()
+        esc.setObjectName("inner_scroll")
+        esc.setWidgetResizable(True)
+        esc.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        esc.setFrameShape(QFrame.NoFrame)
+        esc.setWidget(ew)
+        esc.setFixedHeight(170)
+        self.stack.addWidget(esc)
 
         # 그림 파일
         iw = QWidget()
@@ -609,7 +617,7 @@ class IconPicker(QWidget):
         iv.addWidget(self.status)
         iv.addStretch(1)
         self.stack.addWidget(iw)
-        self.stack.setFixedHeight(214)
+        self.stack.setFixedHeight(170)
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(self, "아이콘 그림 선택", "",
@@ -748,25 +756,28 @@ class ButtonEditorDialog(GlassDialog):
         right_content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         right_v = QVBoxLayout(right_content)
         right_v.setContentsMargins(8, 0, 2, 0)
-        right_v.setSpacing(10)
+        right_v.setSpacing(8)
         right_scroll.setWidget(right_content)
         self.right_scroll = right_scroll
         self.right_content = right_content
         cols_lay.addWidget(right_scroll, 6)
 
-        # 1. 미리보기 (중앙 정렬)
-        preview_wrap = QHBoxLayout()
-        preview_wrap.addStretch(1)
-        self.preview_host = QWidget()
-        self.preview_host.setFixedSize(124, 124)
-        self.preview = DeckButtonWidget(data.clone(), 108, True, icon_style, self.preview_host)
-        self.preview.preview_mode = True
-        self.preview.move(8, 6)
-        preview_wrap.addWidget(self.preview_host)
-        preview_wrap.addStretch(1)
-        right_v.addLayout(preview_wrap)
+        # 1. 미리보기 + 아이콘 헤더 (가로 배치로 세로 공간 절약)
+        top_row = QHBoxLayout()
+        top_row.setSpacing(14)
+        top_row.setAlignment(Qt.AlignVCenter)
 
-        # 2. 아이콘
+        self.preview_host = QWidget()
+        self.preview_host.setFixedSize(96, 96)
+        self.preview = DeckButtonWidget(data.clone(), 88, True, icon_style, self.preview_host)
+        self.preview.preview_mode = True
+        self.preview.move(4, 4)
+        top_row.addWidget(self.preview_host)
+
+        icon_hdr_box = QVBoxLayout()
+        icon_hdr_box.setSpacing(6)
+        icon_hdr_box.setAlignment(Qt.AlignVCenter)
+
         ih = QHBoxLayout()
         ih.addWidget(section_label("아이콘"))
         ih.addStretch(1)
@@ -774,7 +785,11 @@ class ButtonEditorDialog(GlassDialog):
         b_auto.setToolTip("지금 고른 동작에 맞는 테마 아이콘으로")
         b_auto.clicked.connect(self._auto_icon)
         ih.addWidget(b_auto)
-        right_v.addLayout(ih)
+        icon_hdr_box.addLayout(ih)
+
+        top_row.addLayout(icon_hdr_box, 1)
+        right_v.addLayout(top_row)
+
         self.picker = IconPicker(icon_style)
         self.picker.picked.connect(self._set_icon)
         self.picker.fetch_requested.connect(self._fetch_icon)
@@ -782,14 +797,22 @@ class ButtonEditorDialog(GlassDialog):
 
         # 3. 아이콘 색 · 유리 색
         colors_box = QVBoxLayout()
-        colors_box.setSpacing(6)
+        colors_box.setSpacing(4)
         colors_box.addWidget(QLabel("아이콘 색"))
         self.icon_colors = ColorChips(mode="icon")
+        if hasattr(self.icon_colors, "chip_size"):
+            self.icon_colors.chip_size = 28
+        if hasattr(self.icon_colors, "gap"):
+            self.icon_colors.gap = 8
         self.icon_colors.changed.connect(lambda _: self._update_preview())
         colors_box.addWidget(self.icon_colors)
 
         colors_box.addWidget(QLabel("유리 색"))
         self.colors = ColorChips()
+        if hasattr(self.colors, "chip_size"):
+            self.colors.chip_size = 28
+        if hasattr(self.colors, "gap"):
+            self.colors.gap = 8
         self.colors.changed.connect(lambda _: self._update_preview())
         colors_box.addWidget(self.colors)
 
@@ -829,7 +852,7 @@ class ButtonEditorDialog(GlassDialog):
         self._load()
         avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
         dialog_w = min(900, int(avail.width() * 0.92))
-        dialog_h = min(int(avail.height() * 0.85), 680)
+        dialog_h = min(int(avail.height() * 0.9), 820)
         self.resize(dialog_w, dialog_h)
 
     def _refresh_profile_lists(self):

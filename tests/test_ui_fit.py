@@ -12,7 +12,8 @@ if ROOT not in sys.path:
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QRect
+from PySide6.QtGui import QScreen
 from PySide6.QtWidgets import (
     QApplication, QAbstractButton, QLabel, QSpinBox, QScrollArea, QWidget
 )
@@ -68,6 +69,31 @@ def inspect_dialog(dlg, dlg_name):
         if scroll.isVisible() and scroll.horizontalScrollBar() and scroll.horizontalScrollBar().isVisible():
             errors.append(f"[{dlg_name}] 스크롤 영역 가로 스크롤바 노출")
 
+    # 7. 큰 화면에서 바깥 스크롤 없음 (설정창 4개 탭 및 편집창에 적용)
+    if isinstance(dlg, (SettingsDialog, ButtonEditorDialog)):
+        for scroll in dlg.findChildren(QScrollArea):
+            if scroll.isVisible() and scroll.objectName() != "inner_scroll":
+                vbar = scroll.verticalScrollBar()
+                if vbar and vbar.maximum() > 0:
+                    errors.append(f"[{dlg_name}] 바깥 스크롤 {vbar.maximum()} px 넘침")
+
+    # 8. 편집창 두 색 칩이 창 안(스크롤 없이 보이는 영역, 푸터 위)에 완전히 들어옴
+    if isinstance(dlg, ButtonEditorDialog):
+        footer_btns = [
+            b for b in dlg.findChildren(GlassButton)
+            if b.text() in ("취소", "저장", "비우기") and b.isVisible()
+        ]
+        if footer_btns:
+            footer_top = min(b.mapTo(dlg, QPoint(0, 0)).y() for b in footer_btns)
+            for chip_name, chip in (("아이콘색칩", getattr(dlg, "icon_colors", None)),
+                                    ("유리색칩", getattr(dlg, "colors", None))):
+                if chip and chip.isVisible():
+                    chip_bottom = chip.mapTo(dlg, QPoint(0, 0)).y() + chip.height()
+                    if chip_bottom > footer_top:
+                        errors.append(
+                            f"[{dlg_name}] {chip_name} 하단 푸터 침범 (칩 하단 {chip_bottom}px > 푸터 상단 {footer_top}px)"
+                        )
+
     for w in dlg.findChildren(QWidget):
         if not w.isVisible():
             continue
@@ -96,6 +122,13 @@ def inspect_dialog(dlg, dlg_name):
                     if w.width() < txt_w + 32:
                         errors.append(
                             f"[{dlg_name}] GlassButton 아이콘-글자 겹침 위험: '{txt}' (현재 {w.width()}px < 최소 {txt_w + 32}px)"
+                        )
+                if isinstance(w, GlassButton):
+                    margin_lr = w.contentsMargins().left() + w.contentsMargins().right()
+                    req_hint = w.sizeHint().width() - margin_lr - 2
+                    if w.width() < req_hint:
+                        errors.append(
+                            f"[{dlg_name}] GlassButton 폭 부족: '{txt}' (현재 {w.width()}px < 필요 {req_hint}px)"
                         )
 
         # 2. QLabel 검사
@@ -138,6 +171,14 @@ def inspect_dialog(dlg, dlg_name):
     return errors
 
 def run_all_dialog_checks(scale_tag="scale_M", scale_key="M"):
+    orig_available_geometry = QScreen.availableGeometry
+    QScreen.availableGeometry = lambda self, *args, **kwargs: QRect(0, 0, 1920, 1040)
+    try:
+        return _run_all_dialog_checks_impl(scale_tag, scale_key)
+    finally:
+        QScreen.availableGeometry = orig_available_geometry
+
+def _run_all_dialog_checks_impl(scale_tag="scale_M", scale_key="M"):
     results = []
     theme.apply_ui_scale(scale_key)
     

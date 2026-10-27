@@ -244,7 +244,7 @@ class SettingsDialog(GlassDialog):
         self._loading = False
         avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
         dialog_w = min(820, int(avail.width() * 0.90))
-        dialog_h = min(int(avail.height() * 0.85), 680)
+        dialog_h = min(int(avail.height() * 0.9), 760)
         self.resize(dialog_w, dialog_h)
 
     def reject(self):
@@ -303,37 +303,6 @@ class SettingsDialog(GlassDialog):
         self.opacity_lab = QLabel(f"{int(c.opacity * 100)}%")
         self.opacity.valueChanged.connect(self._on_opacity_changed)
         left_bot.addLayout(slider_row("진하기", self.opacity, self.opacity_lab))
-
-        left_bot.addSpacing(4)
-        left_bot.addWidget(section_label("글자"))
-        font_row = QHBoxLayout()
-        font_row.addWidget(QLabel("글자 크기"))
-        self.font_size_keys = ["S", "M", "L"]
-        cur_fs = getattr(c, "font_size", "M")
-        cur_fs_idx = self.font_size_keys.index(cur_fs) if cur_fs in self.font_size_keys else 1
-        self.font_tabs = SegmentedTabs(["작게", "보통", "크게"])
-        self.font_tabs.setCurrentIndex(cur_fs_idx, animate=False)
-        self.font_tabs.currentChanged.connect(self._on_font_size_tab)
-        font_row.addWidget(self.font_tabs, 1)
-        left_bot.addLayout(font_row)
-
-        font_family_box = QVBoxLayout()
-        font_family_box.setSpacing(4)
-        font_family_box.addWidget(QLabel("글꼴"))
-        self.font_combo = no_wheel(QComboBox())
-        self.font_combo.addItem(f"기본 ({theme.DEFAULT_UI_FONT})", "")
-        for fam in theme.korean_font_families():
-            self.font_combo.addItem(fam, fam)
-        cur_font = getattr(c, "ui_font", "") or ""
-        f_idx = self.font_combo.findData(cur_font)
-        self.font_combo.setCurrentIndex(f_idx if f_idx >= 0 else 0)
-        self.font_combo.currentIndexChanged.connect(self._on_ui_font_changed)
-        font_family_box.addWidget(self.font_combo)
-
-        self.font_preview_lab = QLabel("가나다라 ABC 123 Virtual Deck")
-        self._update_font_preview(self.font_combo.currentData() or "")
-        font_family_box.addWidget(self.font_preview_lab)
-        left_bot.addLayout(font_family_box)
 
         left_bot.addStretch(1)
         bot_cols.addLayout(left_bot, 1)
@@ -467,6 +436,37 @@ class SettingsDialog(GlassDialog):
         self.spacing_tabs.currentChanged.connect(lambda i: self._set("spacing", self.SPACING_MAP[i]))
         v.addWidget(self.spacing_tabs)
 
+        # 4. 글자
+        v.addWidget(section_label("글자"))
+        font_row = QHBoxLayout()
+        font_row.addWidget(QLabel("글자 크기"))
+        self.font_size_keys = ["S", "M", "L"]
+        cur_fs = getattr(c, "font_size", "M")
+        cur_fs_idx = self.font_size_keys.index(cur_fs) if cur_fs in self.font_size_keys else 1
+        self.font_tabs = SegmentedTabs(["작게", "보통", "크게"])
+        self.font_tabs.setCurrentIndex(cur_fs_idx, animate=False)
+        self.font_tabs.currentChanged.connect(self._on_font_size_tab)
+        font_row.addWidget(self.font_tabs, 1)
+        v.addLayout(font_row)
+
+        font_family_box = QVBoxLayout()
+        font_family_box.setSpacing(4)
+        font_family_box.addWidget(QLabel("글꼴"))
+        self.font_combo = no_wheel(QComboBox())
+        self.font_combo.addItem(f"기본 ({theme.DEFAULT_UI_FONT})", "")
+        for fam in theme.korean_font_families():
+            self.font_combo.addItem(fam, fam)
+        cur_font = getattr(c, "ui_font", "") or ""
+        f_idx = self.font_combo.findData(cur_font)
+        self.font_combo.setCurrentIndex(f_idx if f_idx >= 0 else 0)
+        self.font_combo.currentIndexChanged.connect(self._on_ui_font_changed)
+        font_family_box.addWidget(self.font_combo)
+
+        self.font_preview_lab = QLabel("가나다라 ABC 123 Virtual Deck")
+        self._update_font_preview(self.font_combo.currentData() or "")
+        font_family_box.addWidget(self.font_preview_lab)
+        v.addLayout(font_family_box)
+
         v.addStretch(1)
         self.stack.addWidget(page_widget)
 
@@ -574,14 +574,13 @@ class SettingsDialog(GlassDialog):
         left.setSpacing(10)
 
         left.addWidget(section_label("백업"))
-        bk_row = QHBoxLayout()
-        bk_row.setSpacing(8)
         b_restore = GlassButton("백업 되돌리기", icon_name="undo")
-        b_restore.setMinimumWidth(130)
         b_restore.clicked.connect(self._open_backup_dialog)
-        bk_row.addWidget(b_restore)
+        left.addWidget(b_restore)
 
-        bk_row.addWidget(QLabel("보관 기간"))
+        retention_row = QHBoxLayout()
+        retention_row.setSpacing(10)
+        retention_row.addWidget(QLabel("보관 기간"))
         self.retention_combo = no_wheel(QComboBox())
         self.retention_combo.addItem("7일", 7)
         self.retention_combo.addItem("14일", 14)
@@ -590,9 +589,8 @@ class SettingsDialog(GlassDialog):
         cur_days = getattr(c, "backup_retention_days", 14)
         self.retention_combo.setCurrentIndex(max(0, self.retention_combo.findData(cur_days)))
         self.retention_combo.currentIndexChanged.connect(lambda _: self._set("backup_retention_days", self.retention_combo.currentData()))
-        bk_row.addWidget(self.retention_combo)
-        bk_row.addStretch(1)
-        left.addLayout(bk_row)
+        retention_row.addWidget(self.retention_combo, 1)
+        left.addLayout(retention_row)
 
         left.addWidget(section_label("동작"))
         self.hold_slider = make_slider(200, 1000, c.hold_ms)
@@ -709,17 +707,19 @@ class SettingsDialog(GlassDialog):
         right.addWidget(self.custom_bg_stack)
 
         right.addWidget(section_label("내 스타일"))
-        style_btn_row = QHBoxLayout()
         b_save_style = GlassButton("스타일 저장")
         b_save_style.clicked.connect(self._save_user_style)
+        right.addWidget(b_save_style)
+
+        style_io_row = QHBoxLayout()
+        style_io_row.setSpacing(8)
         b_export = GlassButton("내보내기")
         b_export.clicked.connect(self._export_style)
         b_import = GlassButton("가져오기")
         b_import.clicked.connect(self._import_style)
-        style_btn_row.addWidget(b_save_style, 1)
-        style_btn_row.addWidget(b_export, 1)
-        style_btn_row.addWidget(b_import, 1)
-        right.addLayout(style_btn_row)
+        style_io_row.addWidget(b_export, 1)
+        style_io_row.addWidget(b_import, 1)
+        right.addLayout(style_io_row)
 
         right.addWidget(section_label("아이콘"))
         icon_conv_row = QHBoxLayout()
