@@ -14,6 +14,9 @@ from typing import Optional, Dict, Tuple, List
 TH32CS_SNAPPROCESS = 0x00000002
 WM_CLOSE = 0x0010
 
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+
 class PROCESSENTRY32W(ctypes.Structure):
     _fields_ = [
         ("dwSize", wintypes.DWORD),
@@ -27,6 +30,29 @@ class PROCESSENTRY32W(ctypes.Structure):
         ("dwFlags", wintypes.DWORD),
         ("szExeFile", wintypes.WCHAR * 260),
     ]
+
+WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
+user32.EnumWindows.restype = wintypes.BOOL
+user32.IsWindowVisible.argtypes = [wintypes.HWND]
+user32.IsWindowVisible.restype = wintypes.BOOL
+user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+user32.GetClassNameW.restype = ctypes.c_int
+user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+user32.GetWindowTextW.restype = ctypes.c_int
+user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+user32.PostMessageW.restype = wintypes.BOOL
+
+kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+kernel32.Process32FirstW.restype = wintypes.BOOL
+kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+kernel32.Process32NextW.restype = wintypes.BOOL
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
 
 # 캐시: {키: (타임스탬프, 결과)}
 _PROGRAM_CACHE: Dict[str, Tuple[float, Optional[bool]]] = {}
@@ -115,18 +141,42 @@ def is_program_running(command: str) -> Optional[bool]:
         return None
 
 
+def _find_folder_window_hwnds(path: str) -> List[int]:
+    """특정 폴더를 보고 있는 윈도우 탐색기 창들의 HWND 목록을 반환합니다."""
+    if not path:
+        return []
+    norm_path = os.path.abspath(path).rstrip("\\/")
+    folder_name = os.path.basename(norm_path).lower()
+    if not folder_name:
+        folder_name = norm_path.lower()
+    norm_path_lower = norm_path.lower()
+
+    hwnds = []
+    def enum_windows_proc(hwnd, _):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        cls_buf = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, cls_buf, 256)
+        if cls_buf.value in ("CabinetWClass", "ExploreWClass"):
+            title_buf = ctypes.create_unicode_buffer(512)
+            user32.GetWindowTextW(hwnd, title_buf, 512)
+            title = title_buf.value.lower()
+            if folder_name in title or norm_path_lower in title:
+                hwnds.append(hwnd)
+        return True
+
+    user32.EnumWindows(WNDENUMPROC(enum_windows_proc), 0)
+    return hwnds
+
+
 def is_folder_open(path: str) -> Optional[bool]:
     """
     해당 폴더를 보고 있는 윈도우 탐색기 창이 열려 있는지 확인합니다.
-    창 클래스가 CabinetWClass이고 창 제목에 폴더 이름이 포함되어 있는지 검사합니다.
     1초 캐시를 사용하며 실패 시 None을 반환합니다.
     """
     if not path:
         return None
     norm_path = os.path.abspath(path).rstrip("\\/")
-    folder_name = os.path.basename(norm_path).lower()
-    if not folder_name:
-        folder_name = norm_path.lower()
 
     now = time.perf_counter()
     if norm_path in _FOLDER_CACHE:
@@ -135,27 +185,8 @@ def is_folder_open(path: str) -> Optional[bool]:
             return val
 
     try:
-        user32 = ctypes.windll.user32
-        found = False
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-        def enum_windows_proc(hwnd, _):
-            nonlocal found
-            if not user32.IsWindowVisible(hwnd):
-                return True
-            cls_buf = ctypes.create_unicode_buffer(256)
-            user32.GetClassNameW(hwnd, cls_buf, 256)
-            if cls_buf.value in ("CabinetWClass", "ExploreWClass"):
-                title_buf = ctypes.create_unicode_buffer(512)
-                user32.GetWindowTextW(hwnd, title_buf, 512)
-                title = title_buf.value.lower()
-                if folder_name in title or norm_path.lower() in title:
-                    found = True
-                    return False
-            return True
-
-        user32.EnumWindows(WNDENUMPROC(enum_windows_proc), 0)
+        hwnds = _find_folder_window_hwnds(norm_path)
+        found = len(hwnds) > 0
         _FOLDER_CACHE[norm_path] = (now, found)
         return found
     except Exception:
@@ -177,11 +208,7 @@ def close_program_windows(command: str) -> int:
         if not pids:
             return 0
 
-        user32 = ctypes.windll.user32
         closed_count = 0
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
         def enum_windows_proc(hwnd, _):
             nonlocal closed_count
             if not user32.IsWindowVisible(hwnd):
@@ -206,34 +233,15 @@ def close_folder_windows(path: str) -> int:
     해당 폴더를 보고 있는 탐색기 창에 WM_CLOSE 메시지를 보냅니다.
     닫기 메시지를 보낸 창 개수를 반환합니다.
     """
+    if not path:
+        return 0
     norm_path = os.path.abspath(path).rstrip("\\/")
-    folder_name = os.path.basename(norm_path).lower()
-    if not folder_name:
-        folder_name = norm_path.lower()
 
     try:
-        user32 = ctypes.windll.user32
-        closed_count = 0
-
-        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-        def enum_windows_proc(hwnd, _):
-            nonlocal closed_count
-            if not user32.IsWindowVisible(hwnd):
-                return True
-            cls_buf = ctypes.create_unicode_buffer(256)
-            user32.GetClassNameW(hwnd, cls_buf, 256)
-            if cls_buf.value in ("CabinetWClass", "ExploreWClass"):
-                title_buf = ctypes.create_unicode_buffer(512)
-                user32.GetWindowTextW(hwnd, title_buf, 512)
-                title = title_buf.value.lower()
-                if folder_name in title or norm_path.lower() in title:
-                    user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
-                    closed_count += 1
-            return True
-
-        user32.EnumWindows(WNDENUMPROC(enum_windows_proc), 0)
+        hwnds = _find_folder_window_hwnds(norm_path)
+        for hwnd in hwnds:
+            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
         _FOLDER_CACHE.pop(norm_path, None)
-        return closed_count
+        return len(hwnds)
     except Exception:
         return 0

@@ -116,7 +116,7 @@ def paint_glass_under(p: QPainter, rect: QRectF, radius: float, *, tint: Optiona
     덱 버튼은 이것을 버튼판이 한꺼번에 그려서 버튼 사이 여백 없이도 그림자가 잘리지 않습니다.
     """
     dark = T().dark
-    colors = tint_colors(tint) if tint and tint != "clear" else None
+    colors = tint_colors(tint)
     press = max(0.0, press)
     w, h = rect.width(), rect.height()
     small = min(w, h)
@@ -194,7 +194,7 @@ def paint_glass(
     """
     t = T()
     dark = t.dark
-    colors = tint_colors(tint) if tint and tint != "clear" else None
+    colors = tint_colors(tint)
     p.save()
     p.setRenderHint(QPainter.Antialiasing)
     path = rounded_path(rect, radius)

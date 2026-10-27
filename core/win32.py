@@ -56,6 +56,8 @@ if IS_WINDOWS:
     user32.MapVirtualKeyW.restype = wintypes.UINT
     user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
     user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+    user32.SetWindowPos.restype = wintypes.BOOL
 
 INPUT_KEYBOARD = 1
 KEYEVENTF_EXTENDEDKEY = 0x0001
@@ -67,6 +69,14 @@ WS_EX_NOACTIVATE = 0x08000000
 WS_EX_TOOLWINDOW = 0x00000080
 WDA_NONE = 0x0
 WDA_EXCLUDEFROMCAPTURE = 0x11
+
+HWND_TOPMOST = -1
+HWND_NOTOPMOST = -2
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_NOZORDER = 0x0004
+SWP_NOACTIVATE = 0x0010
+SWP_FRAMECHANGED = 0x0020
 
 VK_RETURN = 0x0D
 
@@ -151,8 +161,21 @@ def make_no_activate(hwnd: int) -> None:
     try:
         style = _GetWindowLong(hwnd, GWL_EXSTYLE)
         _SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)
+        user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
     except Exception:
         pass
+
+
+def keep_topmost(hwnd: int, enable: bool = True) -> bool:
+    """Windows 레벨에서 HWND_TOPMOST Z-Order를 유지/강제합니다."""
+    if not IS_WINDOWS or not hwnd:
+        return False
+    try:
+        h_insert_after = HWND_TOPMOST if enable else HWND_NOTOPMOST
+        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+        return bool(user32.SetWindowPos(hwnd, h_insert_after, 0, 0, 0, 0, flags))
+    except Exception:
+        return False
 
 
 def set_exclude_from_capture(hwnd: int, exclude: bool) -> bool:

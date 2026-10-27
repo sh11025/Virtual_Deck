@@ -98,6 +98,7 @@ class GlassButton(QPushButton):
     icon_name: 선 아이콘 이름 (glass.draw_icon 참고)
     square: 아이콘만 있는 정사각 버튼
     """
+    draw_text = True  # False 이면 기본 글자 그리기를 생략(서브클래스가 직접 그릴 때)
     MARGIN = (3, 2, 3, 5)  # 그림자 자리 (왼, 위, 오른, 아래)
 
     def __init__(self, text: str = "", tint: str = "clear", icon_name: str = "",
@@ -211,7 +212,7 @@ class GlassButton(QPushButton):
             p.fillRect(rect, rg)
             p.restore()
 
-        colors = tint_colors(tint) if tint != "clear" else None
+        colors = tint_colors(tint)
         fg = colors[2] if colors else QColor(T().text)
         if not colors and self._hover.value > 0.5 and enabled:
             fg = QColor(T().accent_deep)
@@ -222,15 +223,17 @@ class GlassButton(QPushButton):
             p.setFont(self.font())
             p.setPen(fg)
             text_rect = rect
+            # draw_text=False 이면 글자를 그리지 않음(서브클래스가 직접 그림)
+            label = self.text() if self.draw_text else ""
             if self.icon_name:
                 fm = self.fontMetrics()
-                total = 16 + 6 + fm.horizontalAdvance(self.text())
+                total = 16 + 6 + fm.horizontalAdvance(label)
                 x0 = rect.center().x() - total / 2
                 draw_icon(p, self.icon_name, QRectF(x0, rect.center().y() - 8, 16, 16), fg)
                 text_rect = QRectF(x0 + 22, rect.top(), total - 22, rect.height())
-                p.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, self.text())
-            else:
-                p.drawText(text_rect, Qt.AlignCenter, self.text())
+                p.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, label)
+            elif label:
+                p.drawText(text_rect, Qt.AlignCenter, label)
 
 
 # ------------------------------------------------------------------ 켜기/끄기 스위치
@@ -392,7 +395,7 @@ class ColorChips(QWidget):
         super().__init__(parent)
         self.mode = mode     # 'tint' = 유리 색, 'icon' = 아이콘 색
         self.table = theme.TINTS if mode == "tint" else theme.ICON_COLORS
-        self.keys = list(self.table.keys())
+        self.keys = list(theme.BUTTON_TINT_KEYS) if mode == "tint" else list(self.table.keys())
         self.current = self.keys[0]
         self._hover = -1
         self._pop = _Anim(self, 420)
@@ -609,17 +612,6 @@ class GlassDialog(QDialog):
 
     def mouseReleaseEvent(self, e):
         self._drag = None
-
-    # 편의 함수
-    def add_section(self, text: str, hint: str = "") -> None:
-        lab = QLabel(text)
-        lab.setProperty("role", "section")
-        self.body.addWidget(lab)
-        if hint:
-            h = QLabel(hint)
-            h.setProperty("role", "hint")
-            h.setWordWrap(True)
-            self.body.addWidget(h)
 
 
 def section_label(text: str) -> QLabel:

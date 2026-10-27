@@ -162,7 +162,7 @@ class ProfileButton(GlassButton):
         super().__init__("", parent=parent)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.setMinimumWidth(70)
-        self.fixed = 26
+        self.draw_text = False
 
     def sizeHint(self) -> QSize:
         fm = self.fontMetrics()
@@ -170,17 +170,16 @@ class ProfileButton(GlassButton):
         return QSize(w, 26 + 7)
 
     def paintEvent(self, e):
+        # 글자는 아래에서 직접 그리므로 기본 글자 그리기를 끕니다(paintEvent 안 setText 는 재그리기를 유발).
         text = self.text()
-        self.setText("")
         super().paintEvent(e)
-        self.setText(text)
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         l, t, r, b = self.MARGIN
         rect = QRectF(l, t, self.width() - l - r, self.height() - t - b)
         # 상태 점
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor(theme.TINTS["mint"][2]))
+        p.setBrush(QColor(theme.TOGGLE_ON_COLOR))
         p.drawEllipse(QPointF(rect.left() + 12, rect.center().y()), 3.5, 3.5)
         p.setFont(self.font())
         p.setPen(QColor(T().text))
@@ -281,6 +280,8 @@ class MainWindow(QWidget):
         AppDetector.add_own_hwnd(hwnd)
         ShortcutManager.add_own_hwnd(int(self.toast.winId()))
         win32.make_no_activate(hwnd)
+        if self.config.always_on_top:
+            win32.keep_topmost(hwnd, True)
         self._apply_background_mode()
         self._apply_hotkey()
         if not self._native_ready:
@@ -332,7 +333,8 @@ class MainWindow(QWidget):
         self._capture_ok = win32.set_exclude_from_capture(hwnd, want_glass) if want_glass else False
         if not want_glass:
             win32.set_exclude_from_capture(hwnd, False)
-        self.grabber.paused = False
+        # 대화상자가 열려 있으면 일시정지를 유지하고, 아니면 해제합니다(직접 대입 금지).
+        self.grabber.pause(bool(self._dialog_open))
         self.grabber.set_enabled(want_glass and self._capture_ok, self.config.glass_blur)
         if hasattr(self, "act_capture"):
             self.act_capture.setVisible(want_glass)
@@ -505,9 +507,6 @@ class MainWindow(QWidget):
             sr -= 1
         return max(1, sc), max(1, sr)
 
-    def hidden_by_span(self, btn_id: str) -> bool:
-        return btn_id not in self.button_widgets
-
     def _adjust_size(self):
         cfg = self.config
         grid_w = cfg.cols * cfg.button_size + (cfg.cols - 1) * cfg.spacing
@@ -589,17 +588,16 @@ class MainWindow(QWidget):
                 a_type = btn.off_action_type
                 a_data = btn.off_action_data or btn.action_data
             else:
-                # F-3: 불이 켜진 상태에서 눌렀는데 off 동작이 비어 있으면
+                # 불이 켜진 상태에서 눌렀는데 off 동작이 비어 있으면 창 닫기 수행
                 if btn.action_type in ("program", "folder"):
-                    from core.running_state import close_program_windows, close_folder_windows
-                    cnt = close_program_windows(btn.action_data) if btn.action_type == "program" else close_folder_windows(btn.action_data)
+                    ok, msg = ActionExecutor.execute("close", btn.action_data)
                     btn.toggle_on = False
                     self.save()
                     if widget:
                         widget.update_data(btn)
                         widget.play_toggle(False)
-                    if cnt == 0:
-                        self.show_toast("이미 꺼져 있어요", "info")
+                    if not ok:
+                        self.show_toast(msg, "info")
                     return
 
         if a_type == "close" and not a_data:
@@ -660,6 +658,10 @@ class MainWindow(QWidget):
     # ================================================================ 1초마다: 정보 버튼 · 실제 상태 맞추기
     def _on_live_tick(self):
         self._live_tick_count = getattr(self, "_live_tick_count", 0) + 1
+        # 대화상자가 열려 있으면 덱이 대화상자 위로 올라오지 않도록 재적용을 건너뜀
+        if (self.config.always_on_top and self.isVisible() and self._native_ready
+                and not self._dialog_open):
+            win32.keep_topmost(int(self.winId()), True)
         # 타이머는 덱을 숨겨도 계속 흘러가야 하므로 먼저 확인
         self.timers.tick(self._timer_data_for_key)
         self.live_timer.setInterval(250 if self.timers.any_running() else 1000)
@@ -812,17 +814,28 @@ class MainWindow(QWidget):
     def _register_dialog(self, dlg: QWidget):
         """열린 대화상자를 추적하고, 자동 프로필 전환/흐림을 일시정지합니다."""
         self._dialog_open.add(dlg)
-        if hasattr(self, "backdrop"):
-            self.backdrop.paused = True
+        if hasattr(self, "grabber"):
+            self.grabber.pause(True)
         dlg.destroyed.connect(lambda *_: self._unregister_dialog(dlg))
         if hasattr(dlg, "finished"):
             dlg.finished.connect(lambda *_: self._unregister_dialog(dlg))
 
     def _unregister_dialog(self, dlg: QWidget):
         """대화상자가 닫혔을 때 추적에서 빼고 일시정지를 해제합니다."""
-        self._dialog_open.discard(dlg)
-        if not self._dialog_open and hasattr(self, "backdrop"):
-            self.backdrop.paused = False
+        try:
+            self._dialog_open.discard(dlg)
+            if self._dialog_open or not hasattr(self, "grabber"):
+                return
+            # '캡처할 때 보이게(1분)' 중에는 재촬영하면 자기 자신이 찍히므로 일시정지를 유지합니다.
+            timer = getattr(self, "_capture_timer", None)
+            if timer is not None and timer.isActive():
+                return
+            # 트레이로 숨은 동안에도 일시정지 유지
+            if not self.isVisible():
+                return
+            self.grabber.pause(False)
+        except RuntimeError:
+            return
 
     def _position_dialog_beside(self, dlg: QWidget):
         """대화상자를 버튼판 옆(오른쪽 → 왼쪽 → 아래)에 적절히 배치합니다."""
@@ -1080,8 +1093,16 @@ class MainWindow(QWidget):
     def match_profile(self, exe: str, title: str) -> Optional[str]:
         """
         창 제목 조건 + 프로그램 조건이 모두 맞는 프로필 > 창 제목만 맞는 프로필 > 프로그램만 맞는 프로필
-        아무것도 맞지 않으면 기본 프로필
+        모든 프로필이 연결 없음이면 자동 전환하지 않고 현재 프로필을 유지합니다.
+        연결 조건이 있는 프로필이 있을 때 일치하지 않으면 기본 프로필로 복귀합니다.
         """
+        has_any_rules = any(
+            bool((p.target_process or "").strip() or (p.target_title or "").strip())
+            for p in self.profiles.values()
+        )
+        if not has_any_rules:
+            return None
+
         exe_l, title_l = (exe or "").lower(), (title or "").lower()
         best, best_score = None, 0
         for pid, prof in self.profiles.items():
@@ -1101,6 +1122,15 @@ class MainWindow(QWidget):
         return best
 
     # ================================================================ 설정
+    # 설정창이 소유하지 않아, 창이 열려 있는 동안에도 바뀔 수 있는 값들
+    _RUNTIME_FIELDS = ("window_x", "window_y", "pycaw_prompt", "tray_hint_shown")
+
+    def _carry_runtime_fields(self, cfg: AppConfig) -> None:
+        """설정창을 열 때 복사해 둔 설정으로 덮어써도, 그동안 바뀐 실행 중 값은 잃지 않게 합니다."""
+        for name in self._RUNTIME_FIELDS:
+            if hasattr(self.config, name):
+                setattr(cfg, name, getattr(self.config, name))
+
     def _open_settings(self):
         from ui.settings_dialog import SettingsDialog
         if self._settings_dlg and self._settings_dlg.isVisible():
@@ -1131,6 +1161,7 @@ class MainWindow(QWidget):
                     new.rows, new.cols = max(new.rows, before.rows), max(new.cols, before.cols)
             elif new.rows < before.rows or new.cols < before.cols:
                 self.storage.prune_outside(self.profiles, new.rows, new.cols)
+            self._carry_runtime_fields(new)
             self.apply_config(new)
             if new.auto_start != is_autostart_enabled():
                 if not set_autostart(new.auto_start) and win32.IS_WINDOWS:
@@ -1143,9 +1174,8 @@ class MainWindow(QWidget):
 
         def on_rejected():
             before.user_themes = dlg.config.user_themes   # 저장한 테마는 취소해도 남김
+            self._carry_runtime_fields(before)
             self.apply_config(before)
-            if before.user_themes != self.config.user_themes:
-                self.config.user_themes = before.user_themes
             self.save()
             self._settings_dlg = None
 
@@ -1188,6 +1218,7 @@ class MainWindow(QWidget):
             self.setWindowFlag(Qt.WindowStaysOnTopHint, cfg.always_on_top)
             self.move(pos)
             self.show()
+            win32.keep_topmost(int(self.winId()), cfg.always_on_top)
             for dlg in list(self._dialog_open):
                 if dlg and dlg.isVisible():
                     dpos = dlg.pos()
@@ -1197,13 +1228,14 @@ class MainWindow(QWidget):
         if self._native_ready:
             if old.bg_type != cfg.bg_type or theme_changed or not self.grabber.enabled:
                 self._apply_background_mode()
-            elif old.glass_blur != cfg.glass_blur:
-                # 유리 흐림만 바뀌었으면 화면을 다시 찍지 않고 원본으로 다시 흐리게만 수행
-                self.grabber.blur = cfg.glass_blur
-                self.grabber.refresh(force=True, reblur_only=True)
-            elif (getattr(old, "glass_frost", 20) != getattr(cfg, "glass_frost", 20) or
-                  getattr(old, "glass_tint", "") != getattr(cfg, "glass_tint", "")):
-                self.panel.rebuild_background()
+            else:
+                if old.glass_blur != cfg.glass_blur:
+                    # 유리 흐림만 바뀌었으면 화면을 다시 찍지 않고 원본으로 다시 흐리게만 수행
+                    self.grabber.blur = cfg.glass_blur
+                    self.grabber.refresh(force=True, reblur_only=True)
+                if (getattr(old, "glass_frost", 20) != getattr(cfg, "glass_frost", 20) or
+                    getattr(old, "glass_tint", "") != getattr(cfg, "glass_tint", "")):
+                    self.panel.rebuild_background()
 
         # 그리드 구조(칸 수, 버튼 크기, 간격)가 바뀔 때만 _rebuild_grid 호출
         structure_changed = (old.rows, old.cols, old.button_size, old.spacing) != \

@@ -33,10 +33,10 @@ AUTO_HINTS = {
 
 
 class SampleProfilesDialog(GlassDialog):
-    """프로필 예시 모음 창 (모달 없이 한눈에 선택)"""
+    """프로필 예시 모음 창"""
 
     def __init__(self, manager: "ProfileManagerDialog", parent=None):
-        super().__init__("예시 모음", "필요한 작업 환경을 골라 추가해 보세요", parent=parent, width=560, modeless=True)
+        super().__init__("예시 모음", "필요한 작업 환경을 골라 추가해 보세요", parent=parent, width=560, modeless=False)
         self.manager = manager
         self.checkboxes = []
 
@@ -75,7 +75,7 @@ class SampleProfilesDialog(GlassDialog):
 
         self.footer.addStretch(1)
         close_btn = GlassButton("닫기")
-        close_btn.clicked.connect(self.close)
+        close_btn.clicked.connect(self.reject)
         self.footer.addWidget(close_btn)
 
         add_btn = GlassButton("추가", tint="blue", icon_name="plus")
@@ -131,7 +131,7 @@ class SampleProfilesDialog(GlassDialog):
             last_pid = pid
 
         self.manager._populate(last_pid)
-        self.close()
+        self.accept()
         self._toast(f"예시 {len(selected)}개를 추가했어요. 버튼을 우클릭해서 내 것으로 바꿔 보세요.", "success")
 
 
@@ -307,11 +307,8 @@ class ProfileManagerDialog(GlassDialog):
         return pid
 
     def _open_samples(self):
-        dlg = SampleProfilesDialog(self, parent=self.parent() or self)
-        if self.parent():
-            geo = self.parent().geometry()
-            dlg.move(geo.right() + 10, geo.top())
-        dlg.show()
+        dlg = SampleProfilesDialog(self, parent=self)
+        dlg.exec()
 
     def _add(self):
         pid = self._new_id()

@@ -92,10 +92,13 @@ def toggle_mic_mute(from_worker: bool = False):
     """
     if not is_available():
         return False, "마이크 음소거에는 pycaw 설치가 필요해요. (pip install pycaw)"
+    com_inited = False
+    ev = None
     try:
         if from_worker:
             import comtypes
             comtypes.CoInitialize()
+            com_inited = True
         ev = _endpoint("mic", use_cache=not from_worker)
         if ev is None:
             return False, "마이크를 찾지 못했어요."
@@ -105,6 +108,16 @@ def toggle_mic_mute(from_worker: bool = False):
     except Exception as e:
         _cache.pop("mic", None)
         return False, f"마이크 음소거를 바꾸지 못했어요: {e}"
+    finally:
+        # COM 객체를 먼저 해제한 뒤 CoUninitialize (짝을 맞춰 누수 방지)
+        ev = None
+        if com_inited:
+            try:
+                import gc
+                gc.collect()
+                comtypes.CoUninitialize()
+            except Exception:
+                pass
 
 
 def get_volume() -> Optional[int]:

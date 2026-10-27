@@ -497,13 +497,12 @@ w._on_live_tick()
 check(p_btn.toggle_on is True, f"실제 상태 None 시 toggle_on 상태 유지 ({p_btn.toggle_on})")
 
 # 4. 켜진 상태에서 누름 + off 동작 비어 있음 -> close 호출
-close_called = []
-running_state.close_program_windows = lambda cmd: (close_called.append(cmd), 1)[1]
+executed.clear()
 p_btn.toggle_on = True
 p_btn.off_action_type = "none"
 p_btn.off_action_data = ""
 w._handle_click(p_id)
-check(len(close_called) == 1 and close_called[0] == "notepad.exe", f"켜진 상태에서 누르면 close 호출됨 ({close_called})")
+check(("close", "notepad.exe") in executed, f"켜진 상태에서 누르면 close 호출됨 ({executed})")
 check(p_btn.toggle_on is False, f"close 호출 후 toggle_on False로 변경됨 ({p_btn.toggle_on})")
 
 # 5. 단축키 버튼은 누를 때마다 뒤집힘

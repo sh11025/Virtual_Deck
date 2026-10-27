@@ -30,10 +30,10 @@ class _HotkeyFilter(QAbstractNativeEventFilter):
                 msg = wintypes.MSG.from_address(int(message))
                 if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
                     self.owner.activated.emit()
-                    return True, 0
+                    return True
         except Exception:
             pass
-        return False, 0
+        return False
 
 
 class GlobalHotkey(QObject):

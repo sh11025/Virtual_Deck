@@ -66,7 +66,32 @@ TINTS = {
     "pink": ("분홍", "#ffb6d3", "#e8458f", "#ffffff"),
     "red": ("빨강", "#ffa3a3", "#e23a3d", "#ffffff"),
     "yellow": ("노랑", "#ffe88f", "#f2ae00", "#3b2a00"),
+    # 색 유리 스타일용 틴트
+    "sky": ("하늘", "#6cb8ff", "#257fe6", "#ffffff"),
+    "sunset": ("노을", "#ffa085", "#f25542", "#ffffff"),
+    "forest": ("숲", "#6ee7b7", "#10b981", "#ffffff"),
 }
+
+# 덱 배경 '색 유리' 스타일 전용 색(버튼 유리색 선택지에는 나오지 않음)
+GLASS_TINT_COLORS = {
+    "sky": "#3894f0",
+    "sunset": "#ff6f61",
+    "forest": "#2e9a58",
+}
+
+# 버튼 편집창의 '유리 색' 칩에 보여 줄 색 이름(배경 전용 sky/sunset/forest 제외)
+BUTTON_TINT_KEYS = ("clear", "orange", "blue", "mint", "purple", "pink", "red", "yellow")
+
+# 켜짐(토글 ON) 표시 색: 민트 틴트의 아래쪽 진한 색
+TOGGLE_ON_COLOR = TINTS["mint"][2]
+
+
+def glass_tint_hex(name: str, default: str = "#3894f0") -> str:
+    """배경 유리 스타일 이름에 해당하는 대표 색(#rrggbb)을 돌려줍니다."""
+    if name in GLASS_TINT_COLORS:
+        return GLASS_TINT_COLORS[name]
+    data = TINTS.get(name)
+    return data[1] if data and data[1] else default
 
 # 아이콘 색: 이름 → (화면 이름, 색). 'auto' 는 버튼 색에 맞춰 자동
 ICON_COLORS = {

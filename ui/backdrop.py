@@ -192,22 +192,17 @@ def compose_background(config, size: QSize, dpr: float, grabbed: Optional[QPixma
                 p.fillRect(full, QColor(10, 14, 26, int(45 + frost * 1.7)))
             else:
                 p.fillRect(full, QColor(255, 255, 255, int(12 + frost * 1.9)))
-            # 색이 도는 유리 (glass_tint)
-            tint_name = getattr(config, "glass_tint", "")
-            if tint_name:
-                tint_table = {
-                    "sky": "#3894f0",
-                    "sunset": "#ff6f61",
-                    "forest": "#2e9a58",
-                }
-                c_str = tint_table.get(tint_name)
-                if not c_str and tint_name in theme.TINTS:
-                    c_str = theme.TINTS[tint_name][1]
-                if c_str:
-                    p.fillRect(full, with_alpha(QColor(c_str), 55))
         else:
             p.drawPixmap(0, 0, make_aurora(QSize(w, h), dark, seed=1))
             p.fillRect(full, QColor(255, 255, 255, 40) if not dark else QColor(0, 0, 0, 40))
+
+        # 색이 도는 유리 (glass_tint: 캡처 배경 여부와 관계없이 적용)
+        tint_name = getattr(config, "glass_tint", "")
+        if tint_name:
+            c_str = theme.glass_tint_hex(tint_name, "")
+            if c_str:
+                tint_alpha = 75 if grabbed is not None else 85
+                p.fillRect(full, with_alpha(QColor(c_str), tint_alpha))
     elif mode == "color":
         p.fillRect(full, QColor(config.bg_color))
     elif mode == "gradient":

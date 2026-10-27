@@ -288,7 +288,7 @@ class DeckButtonWidget(QWidget):
         if self.timer_view and self.timer_view[3] == "done":   # 타이머 끝: 빨간 빛이 깜빡임
             return QColor("#ef4444"), 0.55 + 0.45 * math.sin(math.radians(self._spin * 3))
         if d.toggle and d.toggle_on:
-            return QColor(theme.TINTS["mint"][2]), 0.55
+            return QColor(theme.TOGGLE_ON_COLOR), 0.55
         return None, 0.0
 
     def under_params(self):
@@ -437,7 +437,7 @@ class DeckButtonWidget(QWidget):
                 p.drawPath(rounded_path(rect.adjusted(-grow, -grow, grow, grow), radius + grow))
             p.restore()
 
-        colors = tint_colors(tint) if tint != "clear" else None
+        colors = tint_colors(tint)
         fg = colors[2] if colors else QColor(T().text)
         unit = min(rect.width(), rect.height())
         wide = rect.width() > rect.height() * 1.4
@@ -521,7 +521,7 @@ class DeckButtonWidget(QWidget):
         elif d.toggle:
             p.setPen(Qt.NoPen)
             p.setBrush(QColor("#ffffff") if (d.toggle_on and colors) else
-                       (QColor(theme.TINTS["mint"][2]) if d.toggle_on else with_alpha(fg, 0.25)))
+                       (QColor(theme.TOGGLE_ON_COLOR) if d.toggle_on else with_alpha(fg, 0.25)))
             p.drawEllipse(corner, dot / 2, dot / 2)
 
     def _paint_info(self, p, rect, fg, halo, tinted):

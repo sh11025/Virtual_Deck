@@ -47,6 +47,7 @@ class FaviconFetcher(QObject):
         super().__init__(parent)
         self._nam = QNetworkAccessManager(self)
         self._reply = None
+        self._host = ""
 
     def fetch(self, url: str) -> bool:
         text = (url or "").strip()
@@ -63,7 +64,15 @@ class FaviconFetcher(QObject):
                          QNetworkRequest.NoLessSafeRedirectPolicy)
         req.setTransferTimeout(6000)
         if self._reply is not None:
-            self._reply.abort()
+            # 이전 요청은 결과를 버리도록 연결을 끊고 취소(done("") 방지)
+            old = self._reply
+            self._reply = None
+            try:
+                old.finished.disconnect(self._on_finished)
+            except (RuntimeError, TypeError):
+                pass
+            old.abort()
+            old.deleteLater()
         self._reply = self._nam.get(req)
         self._reply.finished.connect(self._on_finished)
         return True

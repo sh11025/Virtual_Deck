@@ -139,9 +139,7 @@ def get_style_thumbnail(name: str, theme_dict: dict) -> QPixmap:
         frost = theme_dict.get("glass_frost", 20)
         p.fillRect(r, QColor(10, 14, 26, int(40 + frost * 1.5)) if dark else QColor(255, 255, 255, int(20 + frost * 1.8)))
         if tint:
-            tint_table = {"sky": "#3894f0", "sunset": "#ff6f61", "forest": "#2e9a58"}
-            tc = tint_table.get(tint, "#3894f0")
-            p.fillRect(r, with_alpha(QColor(tc), 60))
+            p.fillRect(r, with_alpha(QColor(theme.glass_tint_hex(tint)), 60))
     else:
         p.fillRect(r, QColor(40, 45, 60) if dark else QColor(240, 242, 248))
 
