@@ -44,6 +44,13 @@ from services.storage_service import StorageService  # noqa: E402
 executed = []
 AE.ActionExecutor.execute = staticmethod(lambda t, d: (executed.append((t, d)) or (True, "ok")))
 SI.GlobalHotkey.register = lambda self, hwnd, sc: False
+import core.app_finder as AF  # noqa: E402
+AF.list_start_apps = lambda force=False: [
+    ("Claude", "Anthropic.Claude_xxx"),
+    ("ChatGPT", "OpenAI.ChatGPT_xxx"),
+    ("Gemini", "Google.Gemini_xxx"),
+    ("Antigravity", "Google.Antigravity_xxx"),
+]
 
 from ui.main_window import MainWindow  # noqa: E402
 MainWindow._check_pycaw = lambda self: None   # 테스트 중에는 설치 질문 창을 띄우지 않음
@@ -622,10 +629,10 @@ from services.sample_profiles import SAMPLES, create_sample_profile
 from core.timer_manager import parse_timer
 
 # 1. 모든 예시 생성 및 기본 속성 검증
-check(len(SAMPLES) == 9, f"예시 프로필 총 9개 정의됨 ({len(SAMPLES)})")
+check(len(SAMPLES) == 10, f"예시 프로필 총 10개 정의됨 ({len(SAMPLES)})")
 
 all_sample_profiles = [create_sample_profile(s) for s in SAMPLES]
-check(len(all_sample_profiles) == 9, "모든 예시 프로필 인스턴스 생성 성공")
+check(len(all_sample_profiles) == 10, "모든 예시 프로필 인스턴스 생성 성공")
 
 # 2. 모든 버튼의 아이콘이 REGISTRY에 존재하는지 확인
 all_buttons = []
@@ -912,6 +919,158 @@ editor_dlg._on_action_changed()
 check(editor_dlg.toggle.isEnabled(), "url 동작으로 변경 시 켜기/끄기 스위치 다시 활성화됨")
 
 editor_dlg.close()
+
+# ====================================================================
+section("P8: 설치된 앱 고르기 및 AI 모음 검증")
+from core.app_finder import (
+    parse_start_apps_json, find_app, app_launch_command, is_app_command,
+)
+from core.running_state import is_program_running, close_program_windows
+from ui.app_picker_dialog import AppPickerDialog
+from ui.button_editor_dialog import ButtonEditorDialog
+
+# 1. parse_start_apps_json 검증
+# 목록
+json_list = json.dumps([
+    {"Name": "Beta App", "AppID": "id.beta"},
+    {"Name": "Alpha App", "AppID": "id.alpha"},
+    {"Name": "Alpha App", "AppID": "id.alpha2"},  # 중복 제거
+])
+parsed_list = parse_start_apps_json(json_list)
+check(len(parsed_list) == 2, f"중복 제거 및 2개 파싱됨 ({len(parsed_list)})")
+check(parsed_list[0][0] == "Alpha App" and parsed_list[1][0] == "Beta App", "가나다/ABC 정렬됨")
+
+# 객체 하나
+json_single = json.dumps({"Name": "Single App", "AppID": "id.single"})
+check(len(parse_start_apps_json(json_single)) == 1, "단일 객체 JSON 파싱 성공")
+
+# 빈 글자
+check(parse_start_apps_json("") == [], "빈 글자 파싱 시 빈 목록")
+check(parse_start_apps_json("   ") == [], "공백 글자 파싱 시 빈 목록")
+
+# 깨진 JSON
+check(parse_start_apps_json("{broken json") == [], "깨진 JSON 파싱 시 빈 목록")
+
+# 이름이나 AppID가 빈 항목 건너뜀
+json_empty_fields = json.dumps([
+    {"Name": "", "AppID": "id1"},
+    {"Name": "Valid", "AppID": "id2"},
+    {"Name": "NoId", "AppID": ""},
+])
+parsed_empty = parse_start_apps_json(json_empty_fields)
+check(len(parsed_empty) == 1 and parsed_empty[0][0] == "Valid", "이름/AppID 비어있으면 건너뜀")
+
+# 2. find_app 검증
+fake_apps = [
+    ("Claude Desktop", "id.claude.desktop"),
+    ("Claude", "id.claude"),
+    ("MyClaudeTool", "id.myclaude"),
+    ("클로드 번역기", "id.korean.claude"),
+]
+# 정확히 같음 > 시작함 > 포함 순서
+found = find_app("Claude", fake_apps)
+check(found is not None and found[0] == "Claude" and found[1] == "id.claude", "정확히 같은 앱 우선 반환")
+
+found_prefix = find_app("클로드", fake_apps)
+check(found_prefix is not None and found_prefix[0] == "클로드 번역기", "시작하는 앱 반환")
+
+found_contains = find_app("Tool", fake_apps)
+check(found_contains is not None and found_contains[0] == "MyClaudeTool", "포함하는 앱 반환")
+
+# "Claude|클로드" 후보 지원
+found_multi = find_app("없는앱|클로드", fake_apps)
+check(found_multi is not None and found_multi[0] == "클로드 번역기", "다중 후보 지원")
+
+# 대소문자 무시
+found_case = find_app("cLaUdE", fake_apps)
+check(found_case is not None and found_case[0] == "Claude", "대소문자 무시 검색")
+
+# 없으면 None
+check(find_app("NonExistentAppXYZ", fake_apps) is None, "일치하는 앱 없으면 None")
+
+# 3. app_launch_command / is_app_command 검증
+cmd1 = app_launch_command("Microsoft.WindowsNotepad_8wekyb3d8bbwe!App")
+check(cmd1.startswith(r"explorer.exe shell:AppsFolder\\"), f"일반 AppID 변환 확인: {cmd1}")
+check(is_app_command(cmd1), "is_app_command True 확인")
+check(is_app_command(cmd1.upper()), "is_app_command 대소문자 무시 확인")
+
+real_file = os.path.abspath(__file__)
+check(app_launch_command(real_file) == real_file, "실존 파일 경로는 그대로 반환")
+check(not is_app_command("notepad.exe"), "일반 명령은 is_app_command False")
+check(not is_app_command(""), "빈 문자열은 is_app_command False")
+
+# 4. running_state 안전장치 검증
+check(is_program_running(cmd1) is None, "앱 이름표 명령은 is_program_running이 None")
+check(close_program_windows(cmd1) == 0, "앱 이름표 명령은 close_program_windows가 0 (탐색기 보호)")
+
+# 5. 버튼 설정 창 (ButtonEditorDialog) 검증
+test_btn = DeckButtonData(id="btn_0_0", row=0, col=0, name="테스트", action_type="program", action_data="notepad.exe")
+beditor = ButtonEditorDialog(test_btn, parent=w, modeless=True)
+prog_page = beditor.action.pages.get("program")
+check(prog_page is not None, "program 설정 페이지 존재")
+pick_btns = [child for child in prog_page.findChildren(object) if getattr(child, "text", lambda: "")() == "설치된 앱…"]
+check(len(pick_btns) >= 1, "program 페이지에 '설치된 앱…' 버튼이 있음")
+
+# app_picked 흉내 -> 이름 칸 자동 채움
+beditor.name_edit.setText("")
+beditor.action.app_picked.emit("테스트앱")
+check(beditor.name_edit.text() == "테스트앱", f"app_picked 수신 시 이름 자동 채움 ({beditor.name_edit.text()})")
+
+# 앱 이름표 명령일 때 끄기 때 할 일이 close 로 자동 설정되지 않음
+beditor.toggle.setChecked(True)
+beditor.off_action.set_value("close", "")
+beditor.action.set_value("program", cmd1)
+beditor._on_action_changed()
+check(beditor.off_action.get_type() != "close", "앱 이름표 명령일 때 off_action이 close로 유지/설정되지 않음")
+
+# 저장 시 경고 없이 저장됨
+beditor._on_save()
+check(beditor.result() == 1, "앱 이름표 명령 저장 시 경고 없이 저장 완료")
+beditor.close()
+
+# 6. AppPickerDialog 검증 (가짜 목록, exec 없이 객체만 생성)
+picker_dlg = AppPickerDialog(parent=w, initial_apps=[("Claude", "id.claude"), ("Gemini", "id.gemini")])
+check(picker_dlg.list_widget.count() == 2, "초기 앱 목록 2개 표시")
+picker_dlg.search_edit.setText("gem")
+check(picker_dlg.list_widget.count() == 1 and picker_dlg.list_widget.item(0).text() == "Gemini", "검색 필터 작동")
+picker_dlg.close()
+
+# 빈 목록일 때 안내 문구
+empty_picker = AppPickerDialog(parent=w, initial_apps=[])
+check(not empty_picker.status_label.isHidden(), "빈 목록일 때 안내 문구 표시됨")
+check("가져오지 못했어요" in empty_picker.status_label.text(), "안내 문구 내용 확인")
+empty_picker.close()
+
+# 7. 예시 모음 "AI 모음" 변환 검증
+ai_sample = next(s for s in SAMPLES if s["key"] == "ai")
+
+# 1) 전부 찾음 -> program 4개가 앱 이름표 명령
+import core.app_finder as AF_MOD
+orig_find = AF_MOD.find_app
+AF_MOD.find_app = lambda kw, apps=None: (kw.split("|")[0], f"id.{kw.split('|')[0].lower()}")
+prof_all_found = create_sample_profile(ai_sample)
+prog_btns = [b for b in prof_all_found.buttons.values() if b.name in ("Claude", "ChatGPT", "Gemini", "Antigravity")]
+check(len(prog_btns) == 4, "AI 모음 앱 버튼 4개 존재")
+check(all(b.action_type == "program" and is_app_command(b.action_data) for b in prog_btns), "전부 찾았을 때 program 4개가 앱 이름표 명령")
+check(not any("app:" in b.action_data for b in prof_all_found.buttons.values()), "app: 문자열이 남지 않음 (모두 찾음)")
+
+# 2) 전부 못 찾음 -> url 4개가 대체주소
+AF_MOD.find_app = lambda kw, apps=None: None
+prof_none_found = create_sample_profile(ai_sample)
+url_btns = [b for b in prof_none_found.buttons.values() if b.name in ("Claude", "ChatGPT", "Gemini", "Antigravity")]
+check(all(b.action_type == "url" and b.action_data.startswith("http") for b in url_btns), "전부 못 찾았을 때 url 4개가 대체주소로 변환")
+check(not any("app:" in b.action_data for b in prof_none_found.buttons.values()), "app: 문자열이 남지 않음 (모두 못 찾음)")
+
+# 3) 일부만 찾음 혼합
+AF_MOD.find_app = lambda kw, apps=None: ("Claude", "id.claude") if "Claude" in kw else None
+prof_mixed = create_sample_profile(ai_sample)
+claude_b = next(b for b in prof_mixed.buttons.values() if b.name == "Claude")
+gpt_b = next(b for b in prof_mixed.buttons.values() if b.name == "ChatGPT")
+check(claude_b.action_type == "program" and is_app_command(claude_b.action_data), "찾은 앱은 program 앱 이름표 명령")
+check(gpt_b.action_type == "url" and gpt_b.action_data == "https://chatgpt.com", "못 찾은 앱은 url 대체주소")
+check(not any("app:" in b.action_data for b in prof_mixed.buttons.values()), "app: 문자열이 남지 않음 (일부 찾음)")
+
+AF_MOD.find_app = orig_find
 
 passed = sum(results)
 print(f"\n결과: {passed} / {len(results)} 통과")

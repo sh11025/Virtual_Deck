@@ -7,11 +7,11 @@
 **화면 위에 띄워 두는 나만의 투명 유리 버튼판**
 
 <p>
-  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.7-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.7-blue.svg?style=flat-square" alt="버전 1.6.7" /></a>
+  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.8-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.8-blue.svg?style=flat-square" alt="버전 1.6.8" /></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6.svg?style=flat-square&logo=windows" alt="Windows 10/11" />
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/GUI-PySide6%20(Qt6)-41CD52.svg?style=flat-square&logo=qt" alt="PySide6" />
-  <img src="https://img.shields.io/badge/tests-455%2F455%20pass-brightgreen.svg?style=flat-square" alt="테스트 455/455 통과" />
+  <img src="https://img.shields.io/badge/tests-493%2F493%20pass-brightgreen.svg?style=flat-square" alt="테스트 493/493 통과" />
 </p>
 
 <br/>
@@ -45,7 +45,7 @@
 
 | 종류 | 파일 이름 | 크기 | 설명 | 다운로드 |
 |---|---|---|---|---|
-| **설치 파일 (추천)** | `VirtualDeck-1.6.7-Setup.exe` | **38.4 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.7-Setup.exe) |
+| **설치 파일 (추천)** | `VirtualDeck-1.6.8-Setup.exe` | **38.5 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.8-Setup.exe) |
 
 
 > [!TIP]
@@ -62,7 +62,7 @@
 3. **할 일 고르고 저장**: 단축키나 자주 쓰는 프로그램을 고르고 **`저장`** 하면 즉시 나만의 전용 버튼이 완성됩니다!
 
 ### 🎁 바로 쓸 수 있는 프로필 예시 모음
-자주 쓰는 프로그램과 일상 작업에 맞춘 9가지 예시 프로필이 준비되어 있어, 따로 설정하지 않고 바로 쓸 수 있어요.
+자주 쓰는 프로그램과 일상 작업에 맞춘 10가지 예시 프로필이 준비되어 있어, 따로 설정하지 않고 바로 쓸 수 있어요.
 
 | 프로필 이름 | 들어 있는 버튼 | 자동으로 바뀌는 프로그램 |
 |---|---|---|
@@ -75,6 +75,7 @@
 | **파워포인트** | 새 슬라이드, 처음부터, 지금부터, 복제, 그룹, 그룹 해제, 저장, 되돌리기 | 파워포인트 (`POWERPNT.EXE`) |
 | **포토샵** | 이동, 브러시, 지우개, 자유 변형, 새 레이어, 되돌리기, 다시 실행, 저장, 내보내기 | 포토샵 (`Photoshop.exe`) |
 | **프리미어 프로** | 선택, 자르기, 편집 추가, 잔물결 삭제, 재생/정지, 마커, 확대, 축소, 내보내기 | 프리미어 프로 (`Adobe Premiere Pro.exe`) |
+| **AI 모음** | Claude·ChatGPT·Gemini·Antigravity 앱을 바로 실행하고 사용량 페이지를 열어요(설치된 앱은 자동으로 찾아요) | - |
 
 ---
 
@@ -94,6 +95,7 @@
 |---|---|---|
 | **단축키** | 키보드 키 조합을 한 번에 전송 | `Ctrl + Shift + S` (캡처), `Alt + Tab`, `Win + D` (바탕화면) |
 | **프로그램 열기** | 자주 쓰는 프로그램 바로 켜기 | 메모장(`notepad.exe`), 계산기, 포토샵, 게임 |
+| **설치된 앱 실행** | 설치된 앱에서 고르기(경로를 몰라도 돼요) | Claude, ChatGPT, Gemini, 계산기 등 시작 메뉴 앱 |
 | **파일 / 폴더 열기** | 자주 찾는 폴더를 탐색기로 열기 | 작업 폴더, 다운로드 폴더, 매일 보는 엑셀 문서 |
 | **웹사이트 열기** | 기본 브라우저로 사이트 접속 | 유튜브, 넷플릭스, 사내 업무 포털 |
 | **소리 조절** | 볼륨 조절 및 음소거 | 볼륨 올리기/내리기, 스피커 음소거, 마이크 끄기 |
@@ -356,7 +358,7 @@ flowchart TD
     C --> D["PyInstaller 폴더 패키징"]:::box
     D --> E["불필요한 파일 삭제 (28MB 절약)"]:::box
     E --> F["Inno Setup (초고압축 한글 설치 파일)"]:::box
-    F --> G["VirtualDeck-1.6.7-Setup.exe (38.4 MB)"]:::done
+    F --> G["VirtualDeck-1.6.8-Setup.exe (38.5 MB)"]:::done
 ```
 
 ---
@@ -397,6 +399,7 @@ python build_exe.py
 
 ### 📜 버전 기록 요약
 
+- **v1.6.8**: 설치된 앱 고르기, AI 모음 예시 추가.
 - **v1.6.7**: 프로필 이동 버튼 추가.
 - **v1.6.6**: 프로필 메뉴가 버튼 뒤로 숨던 문제, 직접 고른 프로필이 되돌아가던 문제 수정.
 - **v1.6.5**: 안정성 점검 수정 (마이크 상태, 창 맨 위 유지, 대화상자 정리).

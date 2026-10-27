@@ -10,7 +10,7 @@ from typing import Dict
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLineEdit, QComboBox,
+    QApplication, QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLineEdit, QComboBox,
     QFileDialog, QGridLayout, QCheckBox, QLabel,
 )
 
@@ -97,6 +97,20 @@ class SampleProfilesDialog(GlassDialog):
         if not selected:
             self._toast("추가할 예시를 하나 이상 선택해 주세요.", "warn")
             return
+
+        # "ai" 예시가 포함되어 있으면 설치된 앱 목록을 미리 조회하여 캐시
+        has_ai = any(item.get("key") == "ai" for item in selected)
+        if has_ai:
+            self._toast("설치된 앱을 찾는 중이에요…", "info")
+            QApplication.processEvents()
+            import threading
+            from core.app_finder import list_start_apps
+            th = threading.Thread(target=list_start_apps, daemon=True)
+            th.start()
+            start_t = time.perf_counter()
+            while th.is_alive() and (time.perf_counter() - start_t < 15.0):
+                QApplication.processEvents()
+                time.sleep(0.05)
 
         # 되돌리기 스택 보관
         p = self.manager.parent()

@@ -11,6 +11,7 @@ import webbrowser
 from typing import Tuple
 
 from core.shortcut_manager import ShortcutManager
+from core.app_finder import is_app_command
 
 ACTION_LABELS = {
     "none": "아무것도 안 함",
@@ -59,6 +60,8 @@ def describe_action(action_type: str, action_data: str) -> str:
     if action_type == "info":
         from core.system_info import INFO_KINDS
         return "정보: " + INFO_KINDS.get(action_data, ("?",))[0]
+    if action_type == "program" and is_app_command(action_data):
+        return "설치된 앱 실행"
     if not action_data:
         return label
     short = action_data if len(action_data) <= 48 else "…" + action_data[-46:]

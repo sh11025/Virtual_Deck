@@ -5,6 +5,7 @@
 """
 
 from typing import Dict, List, Any
+from core import app_finder
 from core.timer_manager import dump_timer
 from models.button_model import DeckButtonData
 from models.profile_model import DeckProfile
@@ -215,6 +216,24 @@ SAMPLES: List[Dict[str, Any]] = [
             DeckButtonData.make_id(2, 2): _btn(2, 2, "내보내기", "shortcut", "Ctrl + M", "video", "mint"),
         },
     },
+    {
+        "key": "ai",
+        "name": "AI 모음",
+        "description": "Claude·ChatGPT·Gemini·Antigravity 앱 실행과 사용량 페이지",
+        "target_process": "",
+        "rows": 3,
+        "cols": 4,
+        "buttons": {
+            DeckButtonData.make_id(0, 0): _btn(0, 0, "Claude", "program", "app:Claude|https://claude.ai", "chat", "orange"),
+            DeckButtonData.make_id(0, 1): _btn(0, 1, "ChatGPT", "program", "app:ChatGPT|https://chatgpt.com", "chat", "mint"),
+            DeckButtonData.make_id(0, 2): _btn(0, 2, "Gemini", "program", "app:Gemini|https://gemini.google.com", "star", "blue"),
+            DeckButtonData.make_id(0, 3): _btn(0, 3, "Antigravity", "program", "app:Antigravity|https://antigravity.google", "rocket", "purple"),
+            DeckButtonData.make_id(1, 0): _btn(1, 0, "Claude 사용량", "url", "https://claude.ai/settings/usage", "chart", "orange"),
+            DeckButtonData.make_id(1, 1): _btn(1, 1, "GPT 사용량", "url", "https://chatgpt.com/settings/usage?tab=overview", "chart", "mint"),
+            DeckButtonData.make_id(1, 2): _btn(1, 2, "Gemini 사용량", "url", "https://gemini.google.com/usage", "chart", "blue"),
+            DeckButtonData.make_id(2, 3): _btn(2, 3, "다음 프로필", "profile", "__next__", "user", "purple"),
+        },
+    },
 ]
 
 
@@ -223,6 +242,34 @@ def create_sample_profile(sample_item: Dict[str, Any], profile_id: str = None) -
     pid = profile_id or f"profile_{sample_item['key']}"
     # 버튼 복제
     buttons = {bid: btn.clone() for bid, btn in sample_item["buttons"].items()}
+
+    # "app:키워드|대체주소" 형식의 program 버튼 처리
+    start_apps = None
+    has_app_spec = any(
+        btn.action_type == "program" and btn.action_data.startswith("app:")
+        for btn in buttons.values()
+    )
+    if has_app_spec:
+        start_apps = app_finder.list_start_apps()
+
+    def _resolve_btn(btn: DeckButtonData):
+        if btn.action_type == "program" and btn.action_data.startswith("app:"):
+            spec = btn.action_data[4:]
+            parts = spec.split("|", 1)
+            keywords = parts[0]
+            fallback_url = parts[1] if len(parts) > 1 else ""
+            found = app_finder.find_app(keywords, apps=start_apps) if start_apps else None
+            if found:
+                btn.action_data = app_finder.app_launch_command(found[1])
+            else:
+                btn.action_type = "url"
+                btn.action_data = fallback_url
+        for child in btn.children.values():
+            _resolve_btn(child)
+
+    for btn in buttons.values():
+        _resolve_btn(btn)
+
     return DeckProfile(
         id=pid,
         name=sample_item["name"],

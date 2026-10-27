@@ -10,6 +10,8 @@ import ctypes
 from ctypes import wintypes
 from typing import Optional, Dict, Tuple, List
 
+from core.app_finder import is_app_command
+
 # Windows API 상수
 TH32CS_SNAPPROCESS = 0x00000002
 WM_CLOSE = 0x0010
@@ -123,6 +125,8 @@ def is_program_running(command: str) -> Optional[bool]:
     """
     if not command:
         return None
+    if is_app_command(command):
+        return None
     exe = _extract_exe_name(command)
     if not exe:
         return None
@@ -199,6 +203,8 @@ def close_program_windows(command: str) -> int:
     (TerminateProcess 같은 강제 종료는 절대 하지 않음)
     닫기 메시지를 보낸 창 개수를 반환합니다.
     """
+    if is_app_command(command):
+        return 0
     exe = _extract_exe_name(command)
     if not exe:
         return 0

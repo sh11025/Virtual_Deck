@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from core import paths
 from core.action_executor import ACTION_LABELS, ACTION_ICONS
+from core.app_finder import is_app_command
 from core.icon_fetcher import extract_file_icon, FaviconFetcher
 from core.macro_manager import parse_steps
 from core.shortcut_manager import ShortcutManager
@@ -111,6 +112,7 @@ class ActionEditor(QWidget):
 
     changed = Signal()
     path_picked = Signal(str, str)     # 종류, 경로
+    app_picked = Signal(str)           # 앱 이름
     url_done = Signal(str)
 
     def __init__(self, types, none_hint: str = "아무 일도 하지 않아요.", parent=None):
@@ -150,6 +152,10 @@ class ActionEditor(QWidget):
             browse = GlassButton("찾기…", icon_name="folder")
             browse.clicked.connect(lambda: self._browse(kind, edit))
             h.addWidget(browse)
+            if kind == "program":
+                pick_app_btn = GlassButton("설치된 앱…", icon_name="app")
+                pick_app_btn.clicked.connect(lambda: self._pick_app(edit))
+                h.addWidget(pick_app_btn)
         else:
             edit.editingFinished.connect(lambda: self.url_done.emit(edit.text()))
         v.addLayout(h)
@@ -315,6 +321,17 @@ class ActionEditor(QWidget):
             path = os.path.normpath(path)
             edit.setText(path)
             self.path_picked.emit(kind, path)
+
+    def _pick_app(self, edit):
+        from ui.app_picker_dialog import AppPickerDialog
+        dlg = AppPickerDialog(parent=self.window())
+        if dlg.exec():
+            name, cmd = dlg.selected_app()
+            if cmd:
+                edit.setText(cmd)
+                self.app_picked.emit(name)
+                self.path_picked.emit("program", cmd)
+                self.changed.emit()
 
     def _edit_macro(self):
         from ui.macro_editor_dialog import MacroEditorDialog
@@ -642,6 +659,9 @@ class ButtonEditorDialog(GlassDialog):
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("버튼에 보일 이름 (비우면 자동)")
         self.name_edit.textChanged.connect(self._update_preview)
+        self.name_edit.textEdited.connect(self._on_name_edited)
+        self._manual_name = bool(str(self.data.name or "").strip())
+        self._last_app_name = ""
         name_v.addWidget(self.name_edit)
         name_toggle_row.addLayout(name_v, 1)
 
@@ -668,6 +688,7 @@ class ButtonEditorDialog(GlassDialog):
         self.action = ActionEditor(types)
         self.action.changed.connect(self._on_action_changed)
         self.action.path_picked.connect(lambda *_: self._on_action_changed())
+        self.action.app_picked.connect(self._on_app_picked)
         left_v.addWidget(self.action)
 
         # 3. 버튼 크기
@@ -892,6 +913,16 @@ class ButtonEditorDialog(GlassDialog):
         self.picker.emoji.set_current(icon)
         self._update_preview()
 
+    def _on_name_edited(self, text: str):
+        self._manual_name = bool(text.strip())
+
+    def _on_app_picked(self, app_name: str):
+        self._last_app_name = app_name
+        cur = self.name_edit.text().strip()
+        if not cur or cur in ("앱", "explorer") or not self._manual_name:
+            self.name_edit.setText(app_name)
+        self._on_action_changed()
+
     def _on_action_changed(self, *_):
         act_type = self.action.get_type()
         is_profile = (act_type == "profile")
@@ -907,10 +938,15 @@ class ButtonEditorDialog(GlassDialog):
         self._sync_toggle_hint()
         if self.toggle.isChecked():
             cur_off = self.off_action.get_type()
-            if cur_off == "close" and act_type not in ("program", "folder"):
-                self.off_action.set_value("none", "")
-            elif cur_off in ("none", "") and act_type in ("program", "folder"):
-                self.off_action.set_value("close", "")
+            t, data = self.action.value()
+            if t == "program" and is_app_command(data):
+                if cur_off == "close":
+                    self.off_action.set_value("none", "")
+            else:
+                if cur_off == "close" and act_type not in ("program", "folder"):
+                    self.off_action.set_value("none", "")
+                elif cur_off in ("none", "") and act_type in ("program", "folder"):
+                    self.off_action.set_value("close", "")
         # 아이콘을 직접 고르지 않았다면 동작에 맞는 테마 아이콘으로 따라 바꿔 줌
         if self._icon_is_auto():
             t, data = self.action.value()
@@ -931,7 +967,7 @@ class ButtonEditorDialog(GlassDialog):
     def result_data(self) -> DeckButtonData:
         a_type, a_data = self.action.value()
         o_type, o_data = self.off_action.value()
-        name = self.name_edit.text().strip() or self._auto_name(a_type, a_data)
+        name = self.name_edit.text().strip() or self._auto_name(a_type, a_data, getattr(self, "_last_app_name", ""))
         icon = (self.icon_value or "").strip()
         if os.path.isabs(icon) and os.path.isfile(icon):
             icon = paths.import_icon_file(icon)
@@ -952,7 +988,7 @@ class ButtonEditorDialog(GlassDialog):
         )
 
     @staticmethod
-    def _auto_name(t, data) -> str:
+    def _auto_name(t, data, app_name="") -> str:
         if not data and t != "group":
             return ""
         if t == "url":
@@ -960,6 +996,8 @@ class ButtonEditorDialog(GlassDialog):
             host = (urlparse(text).hostname or data).replace("www.", "")
             return host.split(".")[0].capitalize()
         if t in ("program", "file", "folder"):
+            if t == "program" and is_app_command(data):
+                return app_name or "앱"
             base = os.path.basename(data.strip("\"'").rstrip("\\/")) or data
             return os.path.splitext(base)[0][:12]
         if t == "shortcut":
@@ -1002,6 +1040,9 @@ class ButtonEditorDialog(GlassDialog):
     def _fetch_icon(self, kind: str):
         t, data = self.action.value()
         if kind == "file":
+            if t == "program" and is_app_command(data):
+                self.picker.status.setText("앱 아이콘은 가져올 수 없어요. 아이콘 목록에서 골라 주세요.")
+                return
             path = (data or "").strip("\"'")
             if t == "program" and path and not os.path.exists(path):
                 import shutil
