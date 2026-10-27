@@ -24,12 +24,14 @@ ACTION_LABELS = {
     "group": "버튼 묶음",
     "info": "정보 보여 주기 (시계·볼륨 등)",
     "timer": "타이머 · 스톱워치",
+    "profile": "프로필 이동",
     "close": "다시 누르면 닫기",
 }
 
 ACTION_ICONS = {
     "url": "🌐", "program": "🚀", "file": "📄", "folder": "📁",
     "shortcut": "⌨️", "media": "🔊", "macro": "⚡", "group": "🗂️", "info": "🕒", "timer": "⏱️",
+    "profile": "👤",
     "close": "✖️",
 }
 
@@ -37,6 +39,8 @@ ACTION_ICONS = {
 def describe_action(action_type: str, action_data: str) -> str:
     """툴팁 등에 보여 줄 짧은 설명"""
     label = ACTION_LABELS.get(action_type, action_type)
+    if action_type == "profile":
+        return "프로필 이동"
     if action_type == "media":
         return ShortcutManager.media_label(action_data)
     if action_type == "macro":

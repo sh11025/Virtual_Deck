@@ -378,7 +378,7 @@ class MainWindow(QWidget):
         head.addWidget(self.back_btn)
 
         self.profile_btn = ProfileButton(self.header_bar)
-        self.profile_btn.setToolTip("프로필 바꾸기")
+        self.profile_btn.setToolTip("프로필 이동")
         self.profile_btn.clicked.connect(self._show_profile_menu)
         head.addWidget(self.profile_btn, 1)
 
@@ -618,19 +618,28 @@ class MainWindow(QWidget):
         if ok is None:   # 매크로 멈춤
             return
 
+        widget = self.button_widgets.get(btn_id)
         if btn.toggle and ok:
             btn.toggle_on = not btn.toggle_on
             self.save()
             if widget:
-                widget.update_data(btn)
-                widget.play_toggle(btn.toggle_on)
+                try:
+                    widget.update_data(btn)
+                    widget.play_toggle(btn.toggle_on)
+                except RuntimeError:
+                    pass
         if widget and (a_type != "macro" or not ok):
-            widget.flash(ok)
+            try:
+                widget.flash(ok)
+            except RuntimeError:
+                pass
         if not ok:
             self.show_toast(msg, "error")
 
     def _run_action(self, btn_id: str, a_type: str, a_data: str, key_suffix: str = ""):
         """동작 하나 실행. 실행 중인 매크로를 다시 누른 경우 (None, '') — 멈춤"""
+        if a_type == "profile":
+            return self._switch_profile_by_action(a_data)
         if a_type == "macro":
             runner = MacroRunner.instance()
             key = self._macro_key(btn_id) + key_suffix
@@ -639,6 +648,21 @@ class MainWindow(QWidget):
                 return None, ""
             return runner.run(key, a_data)
         return ActionExecutor.execute(a_type, a_data)
+
+    def _switch_profile_by_action(self, data: str):
+        ids = list(self.profiles.keys())
+        if data in ("__next__", "__prev__"):
+            if not ids:
+                return False, "프로필이 없어요"
+            cur = ids.index(self.current_profile_id) if self.current_profile_id in ids else 0
+            target = ids[(cur + (1 if data == "__next__" else -1)) % len(ids)]
+        else:
+            target = data
+        if target not in self.profiles:
+            return False, "그 프로필이 없어요 (지워졌을 수 있어요)"
+        self.switch_profile(target, manual=True)
+        self.show_toast(f"{self.profiles[target].name} 프로필로 이동했어요", "info", 1400)
+        return True, ""
 
     def _handle_long_press(self, btn_id: str):
         btn = self.current_buttons().get(btn_id)
@@ -649,12 +673,15 @@ class MainWindow(QWidget):
             return
         if not btn or not btn.has_hold():
             return
-        widget = self.button_widgets.get(btn_id)
         ok, msg = self._run_action(btn_id, btn.hold_action_type, btn.hold_action_data, "#hold")
         if ok is None:
             return
+        widget = self.button_widgets.get(btn_id)
         if widget and (btn.hold_action_type != "macro" or not ok):
-            widget.flash(ok)
+            try:
+                widget.flash(ok)
+            except RuntimeError:
+                pass
         if not ok:
             self.show_toast(msg, "error")
 

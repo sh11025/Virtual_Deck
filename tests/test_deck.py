@@ -689,7 +689,7 @@ check(c_empty.rows == 3 and c_empty.cols == 4, f"기본 그리드 크기가 3행
 def_p = p_empty.get("profile_default")
 more_btn = def_p.buttons.get(DeckButtonData.make_id(2, 3)) if def_p else None
 more_count = len([b for b in more_btn.children.values() if not b.is_empty()]) if (more_btn and more_btn.children) else 0
-check(more_count == 7, f"더보기 버튼 안의 자식 버튼 개수가 7개임 ({more_count}개)")
+check(more_count == 8, f"더보기 버튼 안의 자식 버튼 개수가 8개임 ({more_count}개)")
 shutil.rmtree(empty_tmp, ignore_errors=True)
 
 # 7. 기존 프로필 + 예시 2개 추가 테스트 (이름 중복 시 '(예시)' 추가 및 ensure_grid 보존)
@@ -792,6 +792,126 @@ AppDetector.get_foreground_app = lambda: ("chrome.exe", "D", 1234)
 w._on_tracker_tick()
 check(w.current_profile_id == chrome_pid,
       f"4) 다시 크롬 포커스 시 크롬 프로필로 정상 자동 전환 ({w.current_profile_id})")
+
+# ================================================================ 프로필 이동 버튼 테스트
+check(AE.ACTION_LABELS.get("profile") == "프로필 이동", "ACTION_LABELS 에 profile 라벨 등록 확인")
+check(AE.ACTION_ICONS.get("profile") == "👤", "ACTION_ICONS 에 profile 아이콘 등록 확인")
+check(AE.describe_action("profile", "__next__") == "프로필 이동", "describe_action profile 확인")
+check(IC.ACTION_DEFAULT_ICONS.get("profile") == "user", "ui/icons ACTION_DEFAULT_ICONS profile 확인")
+
+# 프로필 A, B, C 준비
+prof_a_id = "test_prof_a"
+prof_b_id = "test_prof_b"
+prof_c_id = "test_prof_c"
+w.profiles[prof_a_id] = DeckProfile(id=prof_a_id, name="프로필A", buttons={})
+w.profiles[prof_b_id] = DeckProfile(id=prof_b_id, name="프로필B", buttons={})
+w.profiles[prof_c_id] = DeckProfile(id=prof_c_id, name="프로필C", buttons={})
+w.storage.ensure_grid(w.profiles[prof_a_id], w.config.rows, w.config.cols)
+w.storage.ensure_grid(w.profiles[prof_b_id], w.config.rows, w.config.cols)
+w.storage.ensure_grid(w.profiles[prof_c_id], w.config.rows, w.config.cols)
+
+w.switch_profile(prof_a_id, manual=False)
+w._last_external_exe = "test_app.exe"
+w._manual_hold_exe = None
+
+# 프로필 A의 버튼에 프로필 B로 이동하는 버튼 설정
+btn_0_0 = DeckButtonData.make_id(0, 0)
+w.profiles[prof_a_id].buttons[btn_0_0] = DeckButtonData(
+    id=btn_0_0, name="B로 이동", action_type="profile", action_data=prof_b_id, row=0, col=0
+)
+w._rebuild_grid()
+
+exec_count_before = len([e for e in executed if e[0] == "profile"])
+w._handle_click(btn_0_0)
+check(w.current_profile_id == prof_b_id, f"profile 버튼 클릭으로 프로필 B로 이동함 ({w.current_profile_id})")
+check(w._manual_hold_exe == "test_app.exe", f"수동 우선 _manual_hold_exe 가 _last_external_exe 에 맞게 설정됨 ({w._manual_hold_exe})")
+exec_count_after = len([e for e in executed if e[0] == "profile"])
+check(exec_count_before == exec_count_after, "ActionExecutor.execute 로 가지 않고 main_window 에서 처리됨")
+
+# 3개 프로필에서 __next__ 3번 누르면 한 바퀴 돌아 처음으로, __prev__는 반대로
+orig_profiles = w.profiles.copy()
+w.profiles = {
+    prof_a_id: orig_profiles[prof_a_id],
+    prof_b_id: orig_profiles[prof_b_id],
+    prof_c_id: orig_profiles[prof_c_id],
+}
+w.current_profile_id = prof_a_id
+
+w._switch_profile_by_action("__next__")
+check(w.current_profile_id == prof_b_id, f"__next__ 1회: B로 이동 ({w.current_profile_id})")
+w._switch_profile_by_action("__next__")
+check(w.current_profile_id == prof_c_id, f"__next__ 2회: C로 이동 ({w.current_profile_id})")
+w._switch_profile_by_action("__next__")
+check(w.current_profile_id == prof_a_id, f"__next__ 3회: A로 복귀 ({w.current_profile_id})")
+
+w._switch_profile_by_action("__prev__")
+check(w.current_profile_id == prof_c_id, f"__prev__ 1회: C로 이동 ({w.current_profile_id})")
+w._switch_profile_by_action("__prev__")
+check(w.current_profile_id == prof_b_id, f"__prev__ 2회: B로 이동 ({w.current_profile_id})")
+w._switch_profile_by_action("__prev__")
+check(w.current_profile_id == prof_a_id, f"__prev__ 3회: A로 복귀 ({w.current_profile_id})")
+
+w.profiles = orig_profiles
+
+# 없는 프로필 id -> current_profile_id 그대로, 오류 없이 지나감
+cur = w.current_profile_id
+ok, msg = w._switch_profile_by_action("non_existent_profile_id")
+check(not ok and w.current_profile_id == cur, f"없는 프로필 id 전달 시 current_profile_id 유지 ({w.current_profile_id})")
+
+# 길게 누르기에 profile을 넣은 버튼: w._handle_long_press(id) -> 프로필이 이동함
+w.switch_profile(prof_a_id, manual=False)
+w.profiles[prof_a_id].buttons[btn_0_0] = DeckButtonData(
+    id=btn_0_0, name="길게눌러C", action_type="url", action_data="https://example.com",
+    hold_action_type="profile", hold_action_data=prof_c_id, row=0, col=0
+)
+w._rebuild_grid()
+w._handle_long_press(btn_0_0)
+check(w.current_profile_id == prof_c_id, f"길게 누르기 profile 동작으로 프로필 C로 이동함 ({w.current_profile_id})")
+
+# 버튼 설정 창 테스트
+b_edit_data = DeckButtonData(id="btn_1_1", row=1, col=1, name="", action_type="profile", action_data=prof_b_id)
+editor_dlg = ButtonEditorDialog(b_edit_data, parent=w, modeless=True)
+
+# profile 콤보에 프로필 이름들이 들어 있음
+p_page = editor_dlg.action.pages["profile"]
+combo_items = [p_page.combo.itemText(i) for i in range(p_page.combo.count())]
+check("▶ 다음 프로필" in combo_items and "◀ 이전 프로필" in combo_items, "profile 콤보에 특별 항목 포함됨")
+check("프로필A" in combo_items and "프로필B" in combo_items and "프로필C" in combo_items, "profile 콤보에 프로필 이름들 포함됨")
+
+# value() 가 ("profile", id)
+check(editor_dlg.action.value() == ("profile", prof_b_id), f"editor_dlg.action.value()가 ('profile', '{prof_b_id}')임")
+
+# set_value 왕복
+editor_dlg.action.set_value("profile", "__next__")
+check(editor_dlg.action.value() == ("profile", "__next__"), "set_value __next__ 왕복 확인")
+editor_dlg.action.set_value("profile", prof_a_id)
+check(editor_dlg.action.value() == ("profile", prof_a_id), "set_value 프로필 id 왕복 확인")
+
+# 없는 id를 set_value 해도 오류 없음
+editor_dlg.action.set_value("profile", "unknown_missing_id")
+check(editor_dlg.action.value() == ("profile", "unknown_missing_id"), "없는 id set_value 시 오류 없이 선택됨")
+
+# 저장 시 이름 자동 채움
+editor_dlg.name_edit.setText("")
+editor_dlg.action.set_value("profile", "__next__")
+editor_dlg._on_save()
+check(editor_dlg.name_edit.text() == "다음 프로필", f"저장 시 이름 자동 채움 확인 ({editor_dlg.name_edit.text()})")
+
+editor_dlg.name_edit.setText("")
+editor_dlg.action.set_value("profile", prof_b_id)
+editor_dlg._on_save()
+check(editor_dlg.name_edit.text() == "프로필B", f"저장 시 프로필 이름으로 자동 채움 확인 ({editor_dlg.name_edit.text()})")
+
+# "profile" 일 때 켜기/끄기 스위치 비활성
+check(not editor_dlg.toggle.isEnabled(), "profile 동작일 때 켜기/끄기 스위치 비활성화됨")
+check(not editor_dlg.toggle.isChecked(), "profile 동작일 때 켜기/끄기 스위치 꺼짐")
+
+# 다른 동작으로 바꾸면 다시 활성화
+editor_dlg.action.set_value("url", "https://google.com")
+editor_dlg._on_action_changed()
+check(editor_dlg.toggle.isEnabled(), "url 동작으로 변경 시 켜기/끄기 스위치 다시 활성화됨")
+
+editor_dlg.close()
 
 passed = sum(results)
 print(f"\n결과: {passed} / {len(results)} 통과")

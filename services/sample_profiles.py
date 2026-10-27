@@ -32,7 +32,7 @@ def _btn(row: int, col: int, name: str, action_type: str, action_data: str,
     )
 
 
-# 더보기 버튼 안쪽 버튼 목록 (3행 4열 중 7개)
+# 더보기 버튼 안쪽 버튼 목록 (3행 4열 중 8개)
 _MORE_CHILDREN: Dict[str, DeckButtonData] = {
     DeckButtonData.make_id(0, 0): _btn(0, 0, "메모장", "program", "notepad.exe", "note", "clear"),
     DeckButtonData.make_id(0, 1): _btn(0, 1, "화면 잠금", "shortcut", "Win + L", "lock", "sunset"),
@@ -41,6 +41,7 @@ _MORE_CHILDREN: Dict[str, DeckButtonData] = {
     DeckButtonData.make_id(1, 0): _btn(1, 0, "창 왼쪽", "shortcut", "Win + Left", "arrow_left", "mint"),
     DeckButtonData.make_id(1, 1): _btn(1, 1, "창 오른쪽", "shortcut", "Win + Right", "arrow_right", "mint"),
     DeckButtonData.make_id(1, 2): _btn(1, 2, "시계", "info", "clock", "clock", "blue"),
+    DeckButtonData.make_id(1, 3): _btn(1, 3, "다음 프로필", "profile", "__next__", "user", "purple"),
 }
 
 

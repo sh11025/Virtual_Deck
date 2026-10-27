@@ -226,6 +226,18 @@ class ActionEditor(QWidget):
             v.addWidget(hint_label("누르면 안에 버튼이 더 있어요. 저장한 뒤 버튼을 눌러 "
                                    "안쪽 칸을 채우세요. 위쪽 ‹ 버튼으로 다시 나올 수 있어요."))
             return w
+        if t == "profile":
+            w = QWidget()
+            v = QVBoxLayout(w)
+            v.setContentsMargins(0, 0, 0, 0)
+            combo = no_wheel(QComboBox())
+            combo.addItem("▶ 다음 프로필", "__next__")
+            combo.addItem("◀ 이전 프로필", "__prev__")
+            combo.currentIndexChanged.connect(lambda _: self.changed.emit())
+            v.addWidget(combo)
+            v.addWidget(hint_label("누르면 이 프로필로 이동해요. 직접 고른 프로필은 다른 프로그램으로 옮겨 갈 때까지 유지돼요."))
+            w.combo = combo
+            return w
         w = QWidget()
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
@@ -345,6 +357,8 @@ class ActionEditor(QWidget):
             return t, page.value()
         if t in ("media", "info"):
             return t, page.combo.currentData()
+        if t == "profile":
+            return t, page.combo.currentData() or ""
         if t == "timer":
             from core.timer_manager import dump_timer
             then_t, then_d = page.then.value()
@@ -373,6 +387,15 @@ class ActionEditor(QWidget):
         elif t in ("media", "info"):
             i = page.combo.findData(data)
             page.combo.setCurrentIndex(max(0, i))
+        elif t == "profile":
+            i = page.combo.findData(data)
+            if i >= 0:
+                page.combo.setCurrentIndex(i)
+            elif not data:
+                page.combo.setCurrentIndex(0)
+            else:
+                page.combo.addItem("(없는 프로필)", data)
+                page.combo.setCurrentIndex(page.combo.count() - 1)
         elif t == "timer":
             from core.timer_manager import parse_timer
             cfg = parse_timer(data)
@@ -573,9 +596,9 @@ class IconPicker(QWidget):
 
 
 class ButtonEditorDialog(GlassDialog):
-    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "macro", "group", "info", "timer"]
+    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "macro", "group", "profile", "info", "timer"]
     SPANS = [(1, 1), (2, 1), (1, 2), (2, 2)]
-    OFF_TYPES = ["none", "close", "url", "program", "file", "folder", "shortcut", "media", "macro"]
+    OFF_TYPES = ["none", "close", "url", "program", "file", "folder", "shortcut", "media", "macro", "profile"]
 
     def __init__(self, data: DeckButtonData, in_folder: bool = False, icon_style: str = "line",
                  parent=None, modeless: bool = True):
@@ -629,10 +652,10 @@ class ButtonEditorDialog(GlassDialog):
         toggle_row.setSpacing(6)
         self.toggle = GlassToggle()
         self.toggle.toggled.connect(self._on_toggle)
-        toggle_lbl = QLabel("켜기/끄기")
-        toggle_lbl.setFont(theme.ui_font(12))
+        self.toggle_lbl = QLabel("켜기/끄기")
+        self.toggle_lbl.setFont(theme.ui_font(12))
         toggle_row.addWidget(self.toggle)
-        toggle_row.addWidget(toggle_lbl)
+        toggle_row.addWidget(self.toggle_lbl)
         toggle_v.addLayout(toggle_row)
         name_toggle_row.addLayout(toggle_v)
         left_v.addLayout(name_toggle_row)
@@ -745,11 +768,41 @@ class ButtonEditorDialog(GlassDialog):
         save.clicked.connect(self._on_save)
         self.footer.addWidget(save)
 
+        self._refresh_profile_lists()
         self._load()
         avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
         dialog_w = min(900, int(avail.width() * 0.92))
         dialog_h = min(int(avail.height() * 0.85), 680)
         self.resize(dialog_w, dialog_h)
+
+    def _refresh_profile_lists(self):
+        parent = self.parent()
+        profiles_dict = {}
+        if parent and hasattr(parent, "profiles") and isinstance(parent.profiles, dict):
+            profiles_dict = {pid: prof.name for pid, prof in parent.profiles.items()}
+
+        for editor in (self.action, self.hold_action, self.off_action):
+            page = editor.pages.get("profile")
+            if not page or not hasattr(page, "combo"):
+                continue
+            combo = page.combo
+            cur_data = combo.currentData()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("▶ 다음 프로필", "__next__")
+            combo.addItem("◀ 이전 프로필", "__prev__")
+            for pid, pname in profiles_dict.items():
+                combo.addItem(pname, pid)
+            if cur_data:
+                idx = combo.findData(cur_data)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+                else:
+                    combo.addItem("(없는 프로필)", cur_data)
+                    combo.setCurrentIndex(combo.count() - 1)
+            else:
+                combo.setCurrentIndex(0)
+            combo.blockSignals(False)
 
     # ------------------------------------------------------------ 불러오기
     def _load(self):
@@ -758,12 +811,16 @@ class ButtonEditorDialog(GlassDialog):
         self.colors.set_current(d.color)
         self.icon_colors.set_current(d.icon_color or "auto")
         self.action.set_value(d.action_type if d.action_type != "none" else "url", d.action_data)
-        self.toggle.setChecked(d.toggle)
+        is_profile = (self.action.get_type() == "profile")
+        self.toggle.setEnabled(not is_profile)
+        if hasattr(self, "toggle_lbl"):
+            self.toggle_lbl.setEnabled(not is_profile)
+        self.toggle.setChecked(False if is_profile else d.toggle)
         self.off_action.set_value(d.off_action_type, d.off_action_data)
         self.hold_action.set_value(d.hold_action_type, d.hold_action_data)
         span = (d.span_cols, d.span_rows)
         self.span_tabs.setCurrentIndex(self.SPANS.index(span) if span in self.SPANS else 0, animate=False)
-        self.off_box.setVisible(d.toggle)
+        self.off_box.setVisible(self.toggle.isChecked())
         self.clear_btn.setVisible(not d.is_empty())
         if d.is_empty() and not d.icon:
             self.icon_value = ""
@@ -779,6 +836,7 @@ class ButtonEditorDialog(GlassDialog):
         self.cleared = False
         self.icon_value = data.icon
         self._manual_icon = bool(data.icon) and not self._is_default_icon(data.icon)
+        self._refresh_profile_lists()
         self._load()
 
     def update_button_id(self, new_id: str, new_row: int, new_col: int):
@@ -835,9 +893,19 @@ class ButtonEditorDialog(GlassDialog):
         self._update_preview()
 
     def _on_action_changed(self, *_):
+        act_type = self.action.get_type()
+        is_profile = (act_type == "profile")
+        if is_profile:
+            self.toggle.setChecked(False)
+            self.toggle.setEnabled(False)
+            if hasattr(self, "toggle_lbl"):
+                self.toggle_lbl.setEnabled(False)
+        else:
+            self.toggle.setEnabled(True)
+            if hasattr(self, "toggle_lbl"):
+                self.toggle_lbl.setEnabled(True)
         self._sync_toggle_hint()
         if self.toggle.isChecked():
-            act_type = self.action.get_type()
             cur_off = self.off_action.get_type()
             if cur_off == "close" and act_type not in ("program", "folder"):
                 self.off_action.set_value("none", "")
@@ -902,6 +970,12 @@ class ButtonEditorDialog(GlassDialog):
             return "연속 동작"
         if t == "group":
             return "묶음"
+        if t == "profile":
+            if data == "__next__":
+                return "다음 프로필"
+            if data == "__prev__":
+                return "이전 프로필"
+            return "프로필"
         if t == "info":
             return ""
         if t == "timer":
@@ -960,7 +1034,8 @@ class ButtonEditorDialog(GlassDialog):
         t, data = self.action.value()
         if t not in ("group", "info", "timer") and not data:
             names = {"url": "웹 주소", "program": "프로그램", "file": "파일", "folder": "폴더",
-                     "shortcut": "단축키", "media": "미디어 동작", "macro": "연속 동작 순서"}
+                     "shortcut": "단축키", "media": "미디어 동작", "macro": "연속 동작 순서",
+                     "profile": "프로필"}
             inform(self, "내용이 비어 있어요", f"{names.get(t, '동작')}을(를) 정해 주세요.")
             return
         ht, hd = self.hold_action.value()
@@ -972,4 +1047,11 @@ class ButtonEditorDialog(GlassDialog):
             if ot != "none" and not od:
                 inform(self, "내용이 비어 있어요", "켜진 상태에서 할 일을 정하거나 ‘아무것도 안 함’으로 바꿔 주세요.")
                 return
+        if not self.name_edit.text().strip() and t == "profile":
+            page = self.action.pages.get("profile")
+            if page and hasattr(page, "combo"):
+                txt = page.combo.currentText()
+                clean = txt.replace("▶ ", "").replace("◀ ", "").strip()[:12]
+                if clean:
+                    self.name_edit.setText(clean)
         self.accept()

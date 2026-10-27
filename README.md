@@ -7,11 +7,11 @@
 **화면 위에 띄워 두는 나만의 투명 유리 버튼판**
 
 <p>
-  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.6-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.6-blue.svg?style=flat-square" alt="버전 1.6.6" /></a>
+  <a href="https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.7-Setup.exe"><img src="https://img.shields.io/badge/version-1.6.7-blue.svg?style=flat-square" alt="버전 1.6.7" /></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6.svg?style=flat-square&logo=windows" alt="Windows 10/11" />
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python 3.10+" />
   <img src="https://img.shields.io/badge/GUI-PySide6%20(Qt6)-41CD52.svg?style=flat-square&logo=qt" alt="PySide6" />
-  <img src="https://img.shields.io/badge/tests-429%2F429%20pass-brightgreen.svg?style=flat-square" alt="테스트 429/429 통과" />
+  <img src="https://img.shields.io/badge/tests-455%2F455%20pass-brightgreen.svg?style=flat-square" alt="테스트 455/455 통과" />
 </p>
 
 <br/>
@@ -45,7 +45,7 @@
 
 | 종류 | 파일 이름 | 크기 | 설명 | 다운로드 |
 |---|---|---|---|---|
-| **설치 파일 (추천)** | `VirtualDeck-1.6.6-Setup.exe` | **38.4 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.6-Setup.exe) |
+| **설치 파일 (추천)** | `VirtualDeck-1.6.7-Setup.exe` | **38.4 MB** | 시작 메뉴와 바탕화면에 바로가기를 만들고, 제어판에서 언제든 삭제할 수 있어요. | [**다운로드 (Setup.exe)**](https://github.com/sh11025/Virtual_Deck/raw/main/dist/VirtualDeck-1.6.7-Setup.exe) |
 
 
 > [!TIP]
@@ -100,6 +100,7 @@
 | **연속 동작** | 여러 키와 글자를 순서대로 입력 | 인사말 자동 입력, 저장 후 창 닫기(`Ctrl+S` → `Enter`) |
 | **타이머 (뽀모도로)** | 버튼 위에 남은 시간을 보여주며 카운트다운 | 25분 집중 타이머, 3분 라면 타이머, 알람 울림 |
 | **버튼 묶음** | 버튼 하나에 하위 버튼판을 담아 페이지 확장 | 업무용 / 게임용 / 음악용 등 용도별 버튼판 정리 |
+| **프로필 이동** | 버튼 하나로 다른 프로필(버튼판)로 바로 이동하기 | 게임용/작업용을 오가기, 다음 프로필로 돌려 보기 |
 | **스위치 버튼** | 누를 때마다 켜짐/꺼짐 상태 유지 | 마이크 토글, 방송 시작/종료 토글 |
 
 ---
@@ -355,7 +356,7 @@ flowchart TD
     C --> D["PyInstaller 폴더 패키징"]:::box
     D --> E["불필요한 파일 삭제 (28MB 절약)"]:::box
     E --> F["Inno Setup (초고압축 한글 설치 파일)"]:::box
-    F --> G["VirtualDeck-1.6.6-Setup.exe (38.4 MB)"]:::done
+    F --> G["VirtualDeck-1.6.7-Setup.exe (38.4 MB)"]:::done
 ```
 
 ---
@@ -396,6 +397,7 @@ python build_exe.py
 
 ### 📜 버전 기록 요약
 
+- **v1.6.7**: 프로필 이동 버튼 추가.
 - **v1.6.6**: 프로필 메뉴가 버튼 뒤로 숨던 문제, 직접 고른 프로필이 되돌아가던 문제 수정.
 - **v1.6.5**: 안정성 점검 수정 (마이크 상태, 창 맨 위 유지, 대화상자 정리).
 - **v1.6.4**: 설정 창 오른쪽 잘림 수정, 한국 사용자용 프로필 예시 모음 추가.
