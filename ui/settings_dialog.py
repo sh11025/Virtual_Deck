@@ -468,9 +468,8 @@ class SettingsDialog(GlassDialog):
 
     def _on_size_preset(self, idx: int):
         key = self.SIZE_KEYS[idx]
-        px, radius = SIZE_PRESETS[key]
+        px, _radius = SIZE_PRESETS[key]
         self.config.button_size = px
-        self.config.button_radius = radius
         self._changed()
 
     # ================================================================ 3. 편리한 기능 탭
@@ -568,10 +567,13 @@ class SettingsDialog(GlassDialog):
         self.retention_combo.addItem("7일", 7)
         self.retention_combo.addItem("14일", 14)
         self.retention_combo.addItem("30일", 30)
-        self.retention_combo.addItem("무제한", 0)
-        cur_days = getattr(c, "backup_retention_days", 14)
-        self.retention_combo.setCurrentIndex(max(0, self.retention_combo.findData(cur_days)))
-        self.retention_combo.currentIndexChanged.connect(lambda _: self._set("backup_retention_days", self.retention_combo.currentData()))
+        self.retention_combo.addItem("60일", 60)
+        i = self.retention_combo.findData(c.backup_days)
+        if i < 0:   # 목록에 없는 값이면 그 값을 그대로 보여줌
+            self.retention_combo.addItem(f"{c.backup_days}일", c.backup_days)
+            i = self.retention_combo.count() - 1
+        self.retention_combo.setCurrentIndex(i)
+        self.retention_combo.currentIndexChanged.connect(lambda _: self._set("backup_days", self.retention_combo.currentData()))
         retention_row.addWidget(self.retention_combo, 1)
         left.addLayout(retention_row)
 
@@ -581,8 +583,8 @@ class SettingsDialog(GlassDialog):
         self.hold_slider.valueChanged.connect(self._on_hold_changed)
         left.addLayout(slider_row("길게 누르기", self.hold_slider, self.hold_lab))
 
-        self.low_spec_toggle = GlassToggle(getattr(c, "low_spec_mode", False))
-        self.low_spec_toggle.toggled.connect(lambda on: self._set("low_spec_mode", on))
+        self.low_spec_toggle = GlassToggle(c.power_save)
+        self.low_spec_toggle.toggled.connect(lambda on: self._set("power_save", on))
         left.addLayout(toggle_row("절전 모드", "느린 PC에서 부드럽게 해요", self.low_spec_toggle))
 
         left.addWidget(section_label("소리 감지"))

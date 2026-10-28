@@ -120,6 +120,8 @@ class EmojiGrid(QWidget):
 class ActionEditor(QWidget):
     """누르면 할 일 고르기 (종류 + 자세한 값)"""
 
+    VOLUME_SET = "__volume_set__"      # '볼륨 · 미디어' 안의 "정확한 크기로 맞추기" 항목
+
     changed = Signal()
     path_picked = Signal(str, str)     # 종류, 경로
     app_picked = Signal(str)           # 앱 이름
@@ -207,10 +209,34 @@ class ActionEditor(QWidget):
             combo = no_wheel(QComboBox())
             for key, label in ShortcutManager.MEDIA_KEYS:
                 combo.addItem(label, key)
-            combo.currentIndexChanged.connect(lambda _: self.changed.emit())
+            combo.addItem("🎚️ 볼륨을 정확히 ○%로 맞추기", self.VOLUME_SET)
             v.addWidget(combo)
-            v.addWidget(hint_label("음악 앱이나 브라우저 영상에도 대부분 동작해요."))
+            vol_row = QWidget()
+            vr = QHBoxLayout(vol_row)
+            vr.setContentsMargins(0, 0, 0, 0)
+            vr.addWidget(QLabel("소리 크기"))
+            spin = make_spin(0, 100, 50, suffix=" %")
+            spin.valueChanged.connect(lambda _: self.changed.emit())
+            vr.addWidget(spin)
+            vr.addStretch(1)
+            v.addWidget(vol_row)
+            hint = hint_label("음악 앱이나 브라우저 영상에도 대부분 동작해요.")
+            v.addWidget(hint)
+
+            def _on_media_pick(_=None, w=w, combo=combo, vol_row=vol_row, hint=hint):
+                is_set = combo.currentData() == self.VOLUME_SET
+                vol_row.setVisible(is_set)
+                hint.setText("누르면 컴퓨터 소리를 정확히 이 크기로 맞춰요. (0은 소리 끔, 100은 최대)" if is_set
+                             else "음악 앱이나 브라우저 영상에도 대부분 동작해요.")
+                w.layout().invalidate()
+                w.layout().activate()      # 보이기/숨기기 직후 높이를 다시 계산
+                self._fit_stack_to_current()
+                self.changed.emit()
+
+            combo.currentIndexChanged.connect(_on_media_pick)
+            vol_row.setVisible(False)
             w.combo = combo
+            w.spin = spin
             return w
         if t == "macro":
             w = QWidget()
@@ -292,20 +318,6 @@ class ActionEditor(QWidget):
             v.setContentsMargins(0, 0, 0, 0)
             v.addWidget(hint_label("누르면 안에 버튼이 더 있어요. 저장한 뒤 버튼을 눌러 "
                                    "안쪽 칸을 채우세요. 위쪽 ‹ 버튼으로 다시 나올 수 있어요."))
-            return w
-        if t == "volume":
-            w = QWidget()
-            v = QVBoxLayout(w)
-            v.setContentsMargins(0, 0, 0, 0)
-            row = QHBoxLayout()
-            row.addWidget(QLabel("소리 크기"))
-            spin = make_spin(0, 100, 50, suffix=" %")
-            spin.valueChanged.connect(lambda _: self.changed.emit())
-            row.addWidget(spin)
-            row.addStretch(1)
-            v.addLayout(row)
-            v.addWidget(hint_label("누르면 컴퓨터 소리를 정확히 이 크기로 맞춰요. (0은 소리 끔, 100은 최대)"))
-            w.spin = spin
             return w
         if t == "profile":
             w = QWidget()
@@ -591,6 +603,8 @@ class ActionEditor(QWidget):
         if t == "shortcut":
             return t, page.value()
         if t == "media":
+            if page.combo.currentData() == self.VOLUME_SET:
+                return "volume", str(page.spin.value())
             return t, page.combo.currentData()
         if t == "info":
             from core.system_info import INFO_KINDS, clock_kind
@@ -603,8 +617,6 @@ class ActionEditor(QWidget):
                 elif page.checkboxes.get(k) and page.checkboxes[k].isChecked():
                     selected.append(k)
             return t, ",".join(selected) if selected else "clock"
-        if t == "volume":
-            return t, str(page.spin.value())
         if t == "profile":
             return t, page.combo.currentData() or ""
         if t == "back":
@@ -640,6 +652,16 @@ class ActionEditor(QWidget):
         return self.value()[0]
 
     def set_value(self, t: str, data: str):
+        if t == "volume" and "media" in self.types:
+            # 볼륨 맞추기는 '볼륨 · 미디어' 화면 안의 항목으로 보여줌
+            page = self.pages["media"]
+            self.combo.setCurrentIndex(self.types.index("media"))
+            page.combo.setCurrentIndex(page.combo.findData(self.VOLUME_SET))
+            try:
+                page.spin.setValue(max(0, min(100, int(str(data).strip().rstrip("%")))))
+            except ValueError:
+                page.spin.setValue(50)
+            return
         if t not in self.types:
             t = self.types[0]
         self.combo.setCurrentIndex(self.types.index(t))
@@ -683,11 +705,6 @@ class ActionEditor(QWidget):
             if hasattr(page, "_sync_clock_sub"):
                 page._sync_clock_sub()
             self._update_info_hint()
-        elif t == "volume":
-            try:
-                page.spin.setValue(max(0, min(100, int(str(data).strip().rstrip("%")))))
-            except ValueError:
-                page.spin.setValue(50)
         elif t == "profile":
             i = page.combo.findData(data)
             if i >= 0:
@@ -956,7 +973,7 @@ class IconPicker(QWidget):
 
 
 class ButtonEditorDialog(GlassDialog):
-    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "volume", "macro", "group", "profile", "back", "info", "timer", "schedule"]
+    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "macro", "group", "profile", "back", "info", "timer", "schedule"]
     SPANS = [(1, 1), (2, 1), (1, 2), (2, 2)]
     OFF_TYPES = ["none", "close", "url", "program", "file", "folder", "shortcut", "media", "macro", "profile"]
 

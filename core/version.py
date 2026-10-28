@@ -4,5 +4,5 @@
 """
 
 APP_NAME = "Virtual Deck"
-APP_VERSION = "1.9.2"
+APP_VERSION = "1.9.3"
 APP_ID = "VirtualDeck"

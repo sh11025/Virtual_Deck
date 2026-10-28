@@ -140,6 +140,8 @@ class MacroRecorder(QWidget):
 
 
 class MacroEditorDialog(GlassDialog):
+    VOLUME_SET = "__volume_set__"   # '볼륨 · 미디어' 안의 "정확한 크기로 맞추기" 항목
+
     def __init__(self, macro_json: str = "", parent=None):
         super().__init__("연속 동작 만들기", "위에서 아래 순서로 차례대로 실행돼요", parent=parent, width=560)
         self.steps: List[Dict[str, str]] = parse_steps(macro_json)
@@ -190,6 +192,8 @@ class MacroEditorDialog(GlassDialog):
         self.body.addWidget(self.editor_title)
         self.type_combo = no_wheel(QComboBox())
         for key, label in STEP_TYPES.items():
+            if key == "volume_set":
+                continue    # '볼륨 · 미디어' 안으로 합침 (예전에 만든 단계는 그대로 동작)
             self.type_combo.addItem(label, key)
         self.type_combo.currentIndexChanged.connect(self._on_type)
         self.body.addWidget(self.type_combo)
@@ -220,7 +224,23 @@ class MacroEditorDialog(GlassDialog):
         self.media_combo = no_wheel(QComboBox())
         for key, label in ShortcutManager.MEDIA_KEYS:
             self.media_combo.addItem(label, key)
+        self.media_combo.addItem("🎚️ 볼륨을 정확히 ○%로 맞추기", self.VOLUME_SET)
+        self.media_combo.currentIndexChanged.connect(self._on_media_pick)
         ml.addWidget(self.media_combo)
+        self.vol_row = QWidget()
+        vr = QHBoxLayout(self.vol_row)
+        vr.setContentsMargins(0, 0, 0, 0)
+        vr.addWidget(QLabel("소리 크기"))
+        self.vol_spin = no_wheel(QSpinBox())
+        self.vol_spin.setRange(0, 100)
+        self.vol_spin.setSuffix(" %")
+        self.vol_spin.setValue(50)
+        self.vol_spin.setAlignment(Qt.AlignCenter)
+        self.vol_spin.setFixedWidth(110)
+        vr.addWidget(self.vol_spin)
+        vr.addStretch(1)
+        ml.addWidget(self.vol_row)
+        self.vol_row.setVisible(False)
         self.stack.addWidget(med)
 
         # 기다리기 (delay)
@@ -258,20 +278,6 @@ class MacroEditorDialog(GlassDialog):
         wl.addWidget(hint_label("매일 이 시각이 될 때까지 기다립니다. 이미 지난 시각이면 내일 실행해요."))
         self.stack.addWidget(wu_w)
 
-        # 볼륨 맞추기 (volume_set)
-        vol_w = QWidget()
-        vl = QVBoxLayout(vol_w)
-        vl.setContentsMargins(0, 0, 0, 0)
-        vl.setSpacing(6)
-        self.vol_spin = no_wheel(QSpinBox())
-        self.vol_spin.setRange(0, 100)
-        self.vol_spin.setSuffix(" %")
-        self.vol_spin.setValue(50)
-        self.vol_spin.setAlignment(Qt.AlignCenter)
-        self.vol_spin.setFixedWidth(110)
-        vl.addWidget(self.vol_spin, 0, Qt.AlignLeft)
-        vl.addWidget(hint_label("마스터 볼륨을 지정한 퍼센트로 설정합니다."))
-        self.stack.addWidget(vol_w)
 
         self.body.addWidget(self.stack)
 
@@ -372,8 +378,6 @@ class MacroEditorDialog(GlassDialog):
             self.stack.setCurrentIndex(3)
         elif t == "wait_until":
             self.stack.setCurrentIndex(4)
-        elif t == "volume_set":
-            self.stack.setCurrentIndex(5)
         else:
             self.stack.setCurrentIndex(1)
             info = {
@@ -386,6 +390,14 @@ class MacroEditorDialog(GlassDialog):
             self.browse_btn.setVisible(t == "program")
         self.stack.setFixedHeight(self.stack.currentWidget().sizeHint().height())
 
+    def _on_media_pick(self, *_):
+        """'정확한 크기로 맞추기' 를 고르면 소리 크기 칸을 보여줌"""
+        self.vol_row.setVisible(self.media_combo.currentData() == self.VOLUME_SET)
+        page = self.stack.currentWidget()
+        page.layout().invalidate()
+        page.layout().activate()
+        self.stack.setFixedHeight(page.sizeHint().height())
+
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(self, "프로그램 선택", "", "프로그램 (*.exe *.bat *.lnk);;모든 파일 (*.*)")
         if path:
@@ -396,14 +408,14 @@ class MacroEditorDialog(GlassDialog):
         if t == "shortcut":
             return t, self.sc_editor.value()
         if t == "media":
+            if self.media_combo.currentData() == self.VOLUME_SET:
+                return "volume_set", str(self.vol_spin.value())
             return t, self.media_combo.currentData()
         if t == "delay":
             ms = unit_to_ms(self.delay_spin.value(), self.delay_unit.currentText())
             return t, str(ms)
         if t == "wait_until":
             return t, self.time_edit.time().toString("HH:mm")
-        if t == "volume_set":
-            return t, str(self.vol_spin.value())
         v = self.val_edit.text()
         return t, (v if t == "text" else v.strip())
 
@@ -440,7 +452,9 @@ class MacroEditorDialog(GlassDialog):
             return
         s = self.steps[r]
         self.editing_row = r
-        self.type_combo.setCurrentIndex(max(0, self.type_combo.findData(s["type"])))
+        # 볼륨 맞추기 단계는 '볼륨 · 미디어' 안의 항목으로 보여줌
+        shown_type = "media" if s["type"] == "volume_set" else s["type"]
+        self.type_combo.setCurrentIndex(max(0, self.type_combo.findData(shown_type)))
         if s["type"] == "shortcut":
             self.sc_editor.set_value(s["value"])
         elif s["type"] == "media":
@@ -456,8 +470,9 @@ class MacroEditorDialog(GlassDialog):
             if t.isValid():
                 self.time_edit.setTime(t)
         elif s["type"] == "volume_set":
+            self.media_combo.setCurrentIndex(max(0, self.media_combo.findData(self.VOLUME_SET)))
             try:
-                self.vol_spin.setValue(int(s["value"]))
+                self.vol_spin.setValue(max(0, min(100, int(s["value"]))))
             except ValueError:
                 self.vol_spin.setValue(50)
         else:
