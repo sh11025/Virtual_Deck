@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, Signal, QRectF, QRect, QSize
 from PySide6.QtGui import QPainter, QColor, QFont, QPixmap, QPen
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QStackedWidget, QComboBox,
-    QFileDialog, QColorDialog, QAbstractButton, QGridLayout, QScrollArea, QFrame, QListWidget,
+    QFileDialog, QAbstractButton, QGridLayout, QScrollArea, QFrame, QListWidget,
     QListWidgetItem, QSizePolicy,
 )
 
@@ -22,7 +22,7 @@ from ui.theme import T
 from ui.glass import paint_glass, rounded_path, make_aurora, with_alpha
 from ui.widgets import (
     GlassDialog, GlassButton, GlassToggle, SegmentedTabs, KeyCaptureEdit, section_label, hint_label,
-    no_wheel, make_spin,
+    no_wheel, make_spin, pick_color,
 )
 
 
@@ -43,8 +43,8 @@ class ColorSwatch(QAbstractButton):
         self.update()
 
     def _pick(self):
-        c = QColorDialog.getColor(QColor(self.color), self.window(), "색 고르기")
-        if c.isValid():
+        c = pick_color(self.window(), self.color, "색 고르기")
+        if c is not None:
             self.color = c.name()
             self.update()
             self.colorChanged.emit(self.color)
@@ -244,7 +244,7 @@ class SettingsDialog(GlassDialog):
         self._loading = False
         avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
         dialog_w = min(820, int(avail.width() * 0.90))
-        dialog_h = min(int(avail.height() * 0.9), 760)
+        dialog_h = min(int(avail.height() * 0.92), 820)
         self.resize(dialog_w, dialog_h)
 
     def reject(self):

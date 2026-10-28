@@ -8,14 +8,14 @@ import json
 import time
 from typing import Dict, List
 
-from PySide6.QtCore import Qt, Signal, QRectF, QTimer
+from PySide6.QtCore import Qt, Signal, QRectF, QTimer, QTime
 from PySide6.QtGui import QPainter, QColor, QFont, QKeyEvent
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QLineEdit, QWidget,
-    QStackedWidget, QFileDialog, QLabel,
+    QStackedWidget, QFileDialog, QLabel, QTimeEdit, QSpinBox,
 )
 
-from core.macro_manager import STEP_TYPES, parse_steps
+from core.macro_manager import STEP_TYPES, parse_steps, ms_to_unit, unit_to_ms
 from core.shortcut_manager import ShortcutManager
 from ui import theme
 from ui.theme import T
@@ -222,6 +222,41 @@ class MacroEditorDialog(GlassDialog):
             self.media_combo.addItem(label, key)
         ml.addWidget(self.media_combo)
         self.stack.addWidget(med)
+
+        # 기다리기 (delay)
+        del_w = QWidget()
+        dl = QVBoxLayout(del_w)
+        dl.setContentsMargins(0, 0, 0, 0)
+        dl.setSpacing(6)
+        dh = QHBoxLayout()
+        dh.setSpacing(8)
+        self.delay_spin = no_wheel(QSpinBox())
+        self.delay_spin.setRange(1, 999999)
+        self.delay_spin.setValue(1)
+        self.delay_spin.setAlignment(Qt.AlignCenter)
+        self.delay_spin.setMinimumWidth(110)
+        self.delay_unit = no_wheel(QComboBox())
+        self.delay_unit.addItems(["초", "밀리초", "분", "시간"])
+        self.delay_unit.setCurrentText("초")
+        dh.addWidget(self.delay_spin, 1)
+        dh.addWidget(self.delay_unit)
+        dl.addLayout(dh)
+        dl.addWidget(hint_label("다음 단계로 넘어가기 전에 잠시 기다립니다."))
+        self.stack.addWidget(del_w)
+
+        # 정해진 시각까지 기다리기 (wait_until)
+        wu_w = QWidget()
+        wl = QVBoxLayout(wu_w)
+        wl.setContentsMargins(0, 0, 0, 0)
+        wl.setSpacing(6)
+        self.time_edit = no_wheel(QTimeEdit())
+        self.time_edit.setDisplayFormat("HH:mm")
+        self.time_edit.setTime(QTime.currentTime())
+        self.time_edit.setAlignment(Qt.AlignCenter)
+        wl.addWidget(self.time_edit)
+        wl.addWidget(hint_label("매일 이 시각이 될 때까지 기다립니다. 이미 지난 시각이면 내일 실행해요."))
+        self.stack.addWidget(wu_w)
+
         self.body.addWidget(self.stack)
 
         act = QHBoxLayout()
@@ -250,10 +285,13 @@ class MacroEditorDialog(GlassDialog):
     # ------------------------------------------------------------ 목록
     @staticmethod
     def _describe(step) -> str:
-        t, v = step["type"], step["value"]
+        t, v = step.get("type", ""), str(step.get("value", "")).strip()
         label = STEP_TYPES.get(t, t)
         if t == "delay":
-            v = f"{v} ms ({float(v or 0) / 1000:.2g}초)" if v.replace(".", "", 1).isdigit() else v
+            n, u = ms_to_unit(v)
+            return f"⏱ {n}{u} 기다리기"
+        elif t == "wait_until":
+            return f"🕒 {v} 까지 기다리기"
         elif t == "media":
             v = ShortcutManager.media_label(v).split(" ", 1)[-1]
         elif t == "text":
@@ -312,11 +350,14 @@ class MacroEditorDialog(GlassDialog):
             self.stack.setCurrentIndex(0)
         elif t == "media":
             self.stack.setCurrentIndex(2)
+        elif t == "delay":
+            self.stack.setCurrentIndex(3)
+        elif t == "wait_until":
+            self.stack.setCurrentIndex(4)
         else:
             self.stack.setCurrentIndex(1)
             info = {
                 "text": ("입력할 글자 (한글, 이모지도 돼요)", "지금 쓰는 프로그램에 글자를 직접 입력해요. 복사해 둔 내용은 그대로 남아요."),
-                "delay": ("예: 500", "1000 = 1초. 다음 단계 전에 기다릴 시간이에요."),
                 "program": ("프로그램 경로 또는 notepad.exe", "프로그램을 실행해요."),
                 "url": ("예: https://www.google.com", "웹사이트를 열어요."),
             }[t]
@@ -336,6 +377,11 @@ class MacroEditorDialog(GlassDialog):
             return t, self.sc_editor.value()
         if t == "media":
             return t, self.media_combo.currentData()
+        if t == "delay":
+            ms = unit_to_ms(self.delay_spin.value(), self.delay_unit.currentText())
+            return t, str(ms)
+        if t == "wait_until":
+            return t, self.time_edit.time().toString("HH:mm")
         v = self.val_edit.text()
         return t, (v if t == "text" else v.strip())
 
@@ -343,11 +389,17 @@ class MacroEditorDialog(GlassDialog):
         t, v = self._current_value()
         if t == "delay":
             try:
-                v = str(int(float(v)))
+                if int(v) <= 0:
+                    inform(self, "시간을 입력해 주세요", "기다릴 시간은 1 이상이어야 해요.")
+                    return
             except ValueError:
-                inform(self, "숫자를 적어 주세요", "기다릴 시간은 숫자(ms)로 적어 주세요. 예: 500")
+                inform(self, "숫자를 적어 주세요", "기다릴 시간을 입력해 주세요.")
                 return
-        if not v:
+        if t == "wait_until":
+            if not v:
+                inform(self, "시각을 입력해 주세요", "기다릴 시각을 HH:MM 형식으로 입력해 주세요.")
+                return
+        elif not v:
             inform(self, "내용이 비어 있어요", "단계에 들어갈 내용을 정해 주세요.")
             return
         step = {"type": t, "value": v}
@@ -371,6 +423,16 @@ class MacroEditorDialog(GlassDialog):
             self.sc_editor.set_value(s["value"])
         elif s["type"] == "media":
             self.media_combo.setCurrentIndex(max(0, self.media_combo.findData(s["value"])))
+        elif s["type"] == "delay":
+            num, unit = ms_to_unit(s["value"])
+            self.delay_spin.setValue(max(1, num))
+            idx = self.delay_unit.findText(unit)
+            if idx >= 0:
+                self.delay_unit.setCurrentIndex(idx)
+        elif s["type"] == "wait_until":
+            t = QTime.fromString(s["value"], "HH:mm")
+            if t.isValid():
+                self.time_edit.setTime(t)
         else:
             self.val_edit.setText(s["value"])
         self.editor_title.setText(f"{r + 1}번 단계 수정 중")
@@ -382,6 +444,9 @@ class MacroEditorDialog(GlassDialog):
         self.editing_row = -1
         self.val_edit.clear()
         self.sc_editor.set_value("")
+        self.delay_spin.setValue(1)
+        self.delay_unit.setCurrentText("초")
+        self.time_edit.setTime(QTime.currentTime())
         self.editor_title.setText("새 단계 추가")
         self.add_btn.setText("단계 추가")
         self.add_btn.icon_name = "plus"

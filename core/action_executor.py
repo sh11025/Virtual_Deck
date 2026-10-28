@@ -25,14 +25,18 @@ ACTION_LABELS = {
     "group": "버튼 묶음",
     "info": "정보 보여 주기 (시계·볼륨 등)",
     "timer": "타이머 · 스톱워치",
+    "schedule": "예약 (정해진 시각에 시작·종료)",
     "profile": "프로필 이동",
+    "back": "묶음에서 나가기",
     "close": "다시 누르면 닫기",
 }
 
 ACTION_ICONS = {
     "url": "🌐", "program": "🚀", "file": "📄", "folder": "📁",
     "shortcut": "⌨️", "media": "🔊", "macro": "⚡", "group": "🗂️", "info": "🕒", "timer": "⏱️",
+    "schedule": "📅",
     "profile": "👤",
+    "back": "⬅️",
     "close": "✖️",
 }
 
@@ -40,6 +44,8 @@ ACTION_ICONS = {
 def describe_action(action_type: str, action_data: str) -> str:
     """툴팁 등에 보여 줄 짧은 설명"""
     label = ACTION_LABELS.get(action_type, action_type)
+    if action_type == "back":
+        return "묶음에서 나가기"
     if action_type == "profile":
         return "프로필 이동"
     if action_type == "media":
@@ -58,8 +64,19 @@ def describe_action(action_type: str, action_data: str) -> str:
         t = parse_timer(action_data)
         return "스톱워치" if t["mode"] == "stopwatch" else f"타이머 {format_seconds(t['seconds'])}"
     if action_type == "info":
-        from core.system_info import INFO_KINDS
-        return "정보: " + INFO_KINDS.get(action_data, ("?",))[0]
+        from core.system_info import INFO_KINDS, parse_kinds
+        kinds = parse_kinds(action_data, limit=4)
+        names = [INFO_KINDS.get(k, ("?",))[0] for k in kinds]
+        return "정보: " + ", ".join(names)
+    if action_type == "schedule":
+        from core.schedule_manager import parse_schedule
+        cfg = parse_schedule(action_data)
+        parts = []
+        if cfg.get("start"):
+            parts.append(f"{cfg['start']} 시작")
+        if cfg.get("end"):
+            parts.append(f"{cfg['end']} 종료")
+        return "예약 " + (" · ".join(parts) if parts else "시각 미설정")
     if action_type == "program" and is_app_command(action_data):
         return "설치된 앱 실행"
     if not action_data:
@@ -73,6 +90,8 @@ class ActionExecutor:
 
     @staticmethod
     def execute(action_type: str, action_data: str) -> Tuple[bool, str]:
+        if action_type in ("back", "schedule", "info", "timer"):
+            return True, ""
         data = (action_data or "").strip()
         if not data:
             return False, "실행할 내용이 비어 있어요."
@@ -88,8 +107,6 @@ class ActionExecutor:
                 return toggle_mic_mute()
             if action_type in ("shortcut", "media"):
                 return ShortcutManager.send_shortcut(data)
-            if action_type in ("info", "timer"):
-                return True, ""
             if action_type == "close":
                 from core.running_state import close_program_windows, close_folder_windows
                 clean = os.path.expandvars(data.strip().strip("\"'"))

@@ -722,6 +722,7 @@ ACTION_DEFAULT_ICONS = {
     "url": "globe", "program": "rocket", "file": "file", "folder": "folder", "shortcut": "keyboard",
     "media": "volume_up", "macro": "bolt", "group": "grid", "info": "clock", "timer": "timer",
     "profile": "user",
+    "back": "back",
 }
 MEDIA_DEFAULT_ICONS = {
     "VolumeUp": "volume_up", "VolumeDown": "volume_down", "VolumeMute": "volume_mute",

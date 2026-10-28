@@ -231,6 +231,14 @@ class MainWindow(QWidget):
         self.timers = TimerManager(self)
         self.timers.finished.connect(self._on_timer_finished)
 
+        from core.schedule_manager import ScheduleManager
+        self.schedules = ScheduleManager(self)
+        self.schedules.fired.connect(self._on_schedule_fired)
+        self.schedule_timer = QTimer(self)
+        self.schedule_timer.setInterval(1000)
+        self.schedule_timer.timeout.connect(self._check_schedules)
+        self.schedule_timer.start()
+
         runner = MacroRunner.instance()
         runner.started.connect(self._on_macro_started)
         runner.finished.connect(self._on_macro_finished)
@@ -599,6 +607,10 @@ class MainWindow(QWidget):
         if btn.action_type == "group":
             self._enter_folder(btn_id)
             return
+        if btn.action_type == "back":
+            if self.folder_id is not None:
+                self._leave_folder()
+            return
         a_type, a_data = btn.action_type, btn.action_data
         widget = self.button_widgets.get(btn_id)
 
@@ -622,7 +634,7 @@ class MainWindow(QWidget):
         if a_type == "close" and not a_data:
             a_data = btn.action_data
 
-        if a_type == "info":
+        if a_type in ("info", "schedule"):
             if widget:
                 widget.flash(True)
             return
@@ -701,6 +713,36 @@ class MainWindow(QWidget):
         if not ok:
             self.show_toast(msg, "error")
 
+    def _check_schedules(self):
+        """모든 프로필과 묶음의 예약 버튼을 검사합니다."""
+        try:
+            found = {}
+            for pid, prof in self.profiles.items():
+                for bid, btn in prof.buttons.items():
+                    if btn.action_type == "schedule":
+                        found[f"{pid}//{bid}"] = btn
+                    elif btn.action_type == "group":
+                        for cid, child in (btn.children or {}).items():
+                            if child.action_type == "schedule":
+                                found[f"{pid}/{bid}/{cid}"] = child
+            if found:
+                self.schedules.check(found)
+        except Exception:
+            pass
+
+    def _on_schedule_fired(self, key: str, which: str, ok: bool, msg: str):
+        """예약 동작 실행 후 토스트 알림"""
+        try:
+            btn = self._find_button(key)
+            btn_name = btn.name.strip() if btn and btn.name.strip() else "예약"
+            which_kr = "시작했어요" if which == "start" else "끝냈어요"
+            if ok:
+                self.show_toast(f"📅 {btn_name}: {which_kr}", "info")
+            else:
+                self.show_toast(f"📅 {btn_name}: {msg or '실행하지 못했어요'}", "error")
+        except Exception:
+            pass
+
     # ================================================================ 1초마다: 정보 버튼 · 실제 상태 맞추기
     def _on_live_tick(self):
         self._live_tick_count = getattr(self, "_live_tick_count", 0) + 1
@@ -708,8 +750,9 @@ class MainWindow(QWidget):
         if (self.config.always_on_top and self.isVisible() and self._native_ready
                 and not self._dialog_open and not self._menu_open):
             win32.keep_topmost(int(self.winId()), True)
-        # 타이머는 덱을 숨겨도 계속 흘러가야 하므로 먼저 확인
+        # 타이머와 예약은 덱을 숨겨도 계속 흘러가야 하므로 먼저 확인
         self.timers.tick(self._timer_data_for_key)
+        self._check_schedules()
         self.live_timer.setInterval(250 if self.timers.any_running() else 1000)
         if not self.isVisible() and self._native_ready:
             return
@@ -723,6 +766,8 @@ class MainWindow(QWidget):
                 bw.set_info(read_info(d.action_data))
             elif d.action_type == "timer":
                 bw.set_timer_view(self.timers.view(self._macro_key(bid), d.action_data))
+            elif d.action_type == "schedule":
+                bw.update()
             elif (self.config.sync_toggle_state and d.toggle and d.action_type == "media"
                   and d.action_data in ("VolumeMute", "MicMute")):
                 actual = audio_state.get_mute("speaker" if d.action_data == "VolumeMute" else "mic")
@@ -968,7 +1013,16 @@ class MainWindow(QWidget):
             new = dlg.result_data()
             new.id, new.row, new.col = btn_id, original.row, original.col
             if new.action_type == "group":
-                new.children = original.children if original.action_type == "group" else {}
+                is_new_group = original.action_type != "group"
+                new.children = original.children if not is_new_group else {}
+                if is_new_group and not new.children:
+                    r_last = self.config.rows - 1
+                    c_first = 0
+                    bid_back = DeckButtonData.make_id(r_last, c_first)
+                    new.children[bid_back] = DeckButtonData(
+                        id=bid_back, row=r_last, col=c_first,
+                        name="나가기", action_type="back", icon="back", color="gray",
+                    )
                 self.storage._fill(new.children, self.config.rows, self.config.cols)
             else:
                 new.children = {}
@@ -1460,9 +1514,9 @@ class MainWindow(QWidget):
             super().leaveEvent(e)
 
     def _fade_out(self):
-        if self._dialog_open or self.underMouse() or not self.config.auto_fade:
+        if not self.isVisible() or self._dialog_open or self.underMouse() or not self.config.auto_fade:
             return
-        target = min(self.config.opacity, self.config.auto_fade_opacity)
+        target = max(0.2, min(self.config.opacity, self.config.auto_fade_opacity))
         self._fade_anim.stop()
         self._fade_anim.setDuration(600)
         self._fade_anim.setStartValue(self.windowOpacity())
@@ -1524,22 +1578,36 @@ class MainWindow(QWidget):
             self.toggle_visibility()
 
     def toggle_visibility(self):
-        if self.isVisible():
+        if not self.isVisible():
+            self.show_deck()
+            return
+        hwnd = int(self.winId())
+        if win32.is_visible_on_top(hwnd):
             self.hide_to_tray()
         else:
-            self.show_deck()
+            self.show_deck()      # 가려져 있으면 숨기지 않고 앞으로
 
     def show_deck(self):
+        self._fade_timer.stop()
+        self._fade_anim.stop()
         self.show()
         self.raise_()
+        win32.bring_to_front(int(self.winId()), bool(self.config.always_on_top))
         self.setWindowOpacity(self.config.opacity)
+        QTimer.singleShot(0, lambda: (
+            self.setWindowOpacity(self.config.opacity),
+            win32.bring_to_front(int(self.winId()), bool(self.config.always_on_top))
+        ))   # 창이 실제로 뜬 뒤 한 번 더 적용
         capture_allowed = getattr(self, "_capture_timer", None) is not None and self._capture_timer.isActive()
         if not capture_allowed:
             self.grabber.pause(False)
         if self.config.auto_fade and not self.underMouse():
-            self._fade_timer.start(self.config.auto_fade_delay * 1000)
+            self._fade_timer.start(max(self.config.auto_fade_delay, 5) * 1000)
 
     def hide_to_tray(self):
+        self._fade_timer.stop()
+        self._fade_anim.stop()
+        self._idle_timer.stop()
         self.hide()
         self.grabber.pause(True)
         if not self.config.tray_hint_shown:

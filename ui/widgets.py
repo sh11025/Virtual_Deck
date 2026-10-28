@@ -404,6 +404,26 @@ class SegmentedTabs(QWidget):
 
 
 # ------------------------------------------------------------------ 색 고르기
+def pick_color(parent, initial, title="색 고르기"):
+    """맨 위에 뜨는 색 고르기 창. 고른 QColor를 돌려주고, 취소하면 None."""
+    dlg = QColorDialog(QColor(initial), parent)
+    dlg.setWindowTitle(title)
+    dlg.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+    dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+    owner = parent
+    while owner is not None and not hasattr(owner, "_menu_open"):
+        owner = owner.parent() if hasattr(owner, "parent") else None
+    if owner is not None:
+        owner._menu_open += 1
+    try:
+        ok = dlg.exec()
+    finally:
+        if owner is not None:
+            owner._menu_open -= 1
+    color = dlg.selectedColor()
+    return color if ok and color.isValid() else None
+
+
 class ColorChips(QWidget):
     """유리 색을 고르는 동그란 칩 줄"""
 
@@ -471,8 +491,8 @@ class ColorChips(QWidget):
 
     def _pick_custom(self):
         initial = QColor(self.current if theme.is_hex_color(self.current) else "#4f8cff")
-        c = QColorDialog.getColor(initial, self.window(), "색 고르기")
-        if c.isValid():
+        c = pick_color(self.window(), initial, "색 고르기")
+        if c is not None:
             self.add_custom(c.name().lower())
 
     def add_custom(self, hex_color: str):

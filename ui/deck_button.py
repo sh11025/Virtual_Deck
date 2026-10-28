@@ -61,13 +61,14 @@ def icon_color_for(data: DeckButtonData, fg: QColor) -> QColor:
 
 
 def label_color(data: DeckButtonData, face: QColor, fg: QColor) -> QColor:
-    """버튼 글자색. 아이콘 색을 정했으면 글자도 그 색(바탕에서 안 보이면 보정), 자동이면 기존 색."""
+    """버튼 글자색. 아이콘 색을 정했으면 글자도 그 색, 자동이거나 알 수 없으면 기본 색."""
     if (data.icon_color or "auto") in ("", "auto"):
         return QColor(fg)
     hex_value = theme.icon_color_hex(data.icon_color)
     if not hex_value:
         return QColor(fg)
-    return theme.readable_on(QColor(hex_value), face)
+    return QColor(hex_value)
+
 
 
 def paint_button_icon(p: QPainter, data: DeckButtonData, rect: QRectF, fg: QColor, style: str,
@@ -458,14 +459,19 @@ class DeckButtonWidget(QWidget):
         fg = label_color(d, face, fg)
         unit = min(rect.width(), rect.height())
         wide = rect.width() > rect.height() * 1.4
-        halo = QColor(0, 0, 0, 60) if (colors or T().dark) else QColor(255, 255, 255, 120)
-        if clear:   # 복잡한 바탕화면 위에서도 보이도록 둘레 빛을 진하게
-            halo = QColor(0, 0, 0, 130) if (colors or T().dark) else QColor(255, 255, 255, 220)
+        lum = (0.299 * fg.red() + 0.587 * fg.green() + 0.114 * fg.blue()) / 255
+        if clear:
+            halo = QColor(0, 0, 0, 130) if lum > 0.5 else QColor(255, 255, 255, 220)
+        else:
+            halo = QColor(0, 0, 0, 110) if lum > 0.5 else QColor(255, 255, 255, 150)
+
 
         if d.action_type == "info":
             self._paint_info(p, rect, fg, halo, colors is not None)
         elif d.action_type == "timer":
             self._paint_timer(p, rect, radius, fg, halo, colors is not None)
+        elif d.action_type == "schedule":
+            self._paint_schedule(p, rect, radius, fg, halo, colors is not None)
         else:
             labels = self.show_labels and bool(d.name.strip()) and self.button_size >= 70
             if wide:
@@ -542,41 +548,124 @@ class DeckButtonWidget(QWidget):
             p.drawEllipse(corner, dot / 2, dot / 2)
 
     def _paint_info(self, p, rect, fg, halo, tinted):
-        """정보 버튼: 큰 값 + 작은 설명 + 아래쪽 게이지 막대"""
-        from core.system_info import INFO_KINDS
+        """정보 버튼: 1개면 큰 값+작은 설명+게이지, 2개 이상이면 칸을 나누어 작은 라벨+큰 값 표시"""
+        from core.system_info import INFO_KINDS, parse_kinds, capacity, read_info
         d = self.button_data
-        big, small, gauge = self.info or ("…", INFO_KINDS.get(d.action_data, ("",))[0], None)
-        if d.name.strip() and self.show_labels:
-            small = d.name.strip()
-        unit = min(rect.width(), rect.height())
-        # 작은 아이콘 (왼쪽 위)
-        s = unit * 0.2
-        icons.paint_icon(p, d.icon if icons.is_theme_icon(d.icon) else icons.default_icon_for("info", d.action_data),
-                         QRectF(rect.left() + unit * 0.13, rect.top() + unit * 0.12, s, s),
-                         with_alpha(fg, 0.7), "line")
-        font = theme.ui_font(unit * (0.27 if len(big) <= 4 else 0.22), QFont.Bold)
-        p.setFont(font)
-        big_rect = QRectF(rect.left(), rect.top() + rect.height() * 0.24, rect.width(), rect.height() * 0.42)
-        p.setPen(halo)
-        p.drawText(big_rect.translated(0, 1), Qt.AlignCenter, big)
-        p.setPen(fg)
-        p.drawText(big_rect, Qt.AlignCenter, big)
-        p.setFont(theme.ui_font(max(9.0, unit * 0.115), QFont.DemiBold))
-        p.setPen(with_alpha(fg, 0.8))
-        fm = QFontMetrics(p.font())
-        small_rect = QRectF(rect.left() + 4, rect.top() + rect.height() * 0.64, rect.width() - 8, rect.height() * 0.18)
-        p.drawText(small_rect, Qt.AlignCenter, fm.elidedText(small, Qt.ElideRight, int(small_rect.width())))
-        if gauge is not None:
-            bar = QRectF(rect.left() + unit * 0.18, rect.bottom() - unit * 0.13, rect.width() - unit * 0.36, max(3.0, unit * 0.045))
-            p.setPen(Qt.NoPen)
-            p.setBrush(with_alpha(fg, 0.18))
-            p.drawRoundedRect(bar, bar.height() / 2, bar.height() / 2)
-            fill = QRectF(bar.left(), bar.top(), bar.width() * max(0.0, min(1.0, gauge)), bar.height())
-            c = QColor(T().accent) if not tinted else QColor("#ffffff")
-            if gauge > 0.85 and d.action_data in ("cpu", "memory"):
-                c = QColor("#ef4444")
-            p.setBrush(c)
-            p.drawRoundedRect(fill, bar.height() / 2, bar.height() / 2)
+        cap = capacity(self.span[0], self.span[1])
+        kinds = parse_kinds(d.action_data, cap)
+
+        if len(kinds) == 1:
+            kind = kinds[0]
+            big, small, gauge = (self.info if self.info and self.info[0] != "?" else None) or read_info(kind)
+            if d.name.strip() and self.show_labels:
+                small = d.name.strip()
+            unit = min(rect.width(), rect.height())
+            # 작은 아이콘 (왼쪽 위)
+            s = unit * 0.2
+            icons.paint_icon(p, d.icon if icons.is_theme_icon(d.icon) else icons.default_icon_for("info", kind),
+                             QRectF(rect.left() + unit * 0.13, rect.top() + unit * 0.12, s, s),
+                             with_alpha(fg, 0.7), "line")
+            font = theme.ui_font(unit * (0.27 if len(big) <= 4 else 0.22), QFont.Bold)
+            p.setFont(font)
+            big_rect = QRectF(rect.left(), rect.top() + rect.height() * 0.24, rect.width(), rect.height() * 0.42)
+            p.setPen(halo)
+            p.drawText(big_rect.translated(0, 1), Qt.AlignCenter, big)
+            p.setPen(fg)
+            p.drawText(big_rect, Qt.AlignCenter, big)
+            p.setFont(theme.ui_font(max(9.0, unit * 0.115), QFont.DemiBold))
+            p.setPen(with_alpha(fg, 0.8))
+            fm = QFontMetrics(p.font())
+            small_rect = QRectF(rect.left() + 4, rect.top() + rect.height() * 0.64, rect.width() - 8, rect.height() * 0.18)
+            p.drawText(small_rect, Qt.AlignCenter, fm.elidedText(small, Qt.ElideRight, int(small_rect.width())))
+            if gauge is not None:
+                bar = QRectF(rect.left() + unit * 0.18, rect.bottom() - unit * 0.13, rect.width() - unit * 0.36, max(3.0, unit * 0.045))
+                p.setPen(Qt.NoPen)
+                p.setBrush(with_alpha(fg, 0.18))
+                p.drawRoundedRect(bar, bar.height() / 2, bar.height() / 2)
+                fill = QRectF(bar.left(), bar.top(), bar.width() * max(0.0, min(1.0, gauge)), bar.height())
+                c = QColor(T().accent) if not tinted else QColor("#ffffff")
+                if gauge > 0.85 and kind in ("cpu", "memory"):
+                    c = QColor("#ef4444")
+                p.setBrush(c)
+                p.drawRoundedRect(fill, bar.height() / 2, bar.height() / 2)
+        else:
+            # 2개 이상일 때: 영역 분할 (2개: 가로 반 또는 세로 반, 4개: 2x2)
+            # 이름(버튼 이름)은 정보가 2개 이상일 때 그리지 않음
+            w, h = rect.width(), rect.height()
+            w2, h2 = w / 2.0, h / 2.0
+
+            if len(kinds) == 2:
+                if w >= h:
+                    cells = [
+                        QRectF(rect.left(), rect.top(), w2, h),
+                        QRectF(rect.left() + w2, rect.top(), w2, h),
+                    ]
+                else:
+                    cells = [
+                        QRectF(rect.left(), rect.top(), w, h2),
+                        QRectF(rect.left(), rect.top() + h2, w, h2),
+                    ]
+            else:
+                cells = [
+                    QRectF(rect.left(), rect.top(), w2, h2),
+                    QRectF(rect.left() + w2, rect.top(), w2, h2),
+                    QRectF(rect.left(), rect.top() + h2, w2, h2),
+                    QRectF(rect.left() + w2, rect.top() + h2, w2, h2),
+                ]
+
+            # 구분선 그리기 (fg 알파 40)
+            div_pen = QPen(with_alpha(fg, 40 / 255.0), 1.0)
+            p.setPen(div_pen)
+            if len(kinds) == 2:
+                if w >= h:
+                    p.drawLine(QPointF(rect.left() + w2, rect.top() + 6), QPointF(rect.left() + w2, rect.bottom() - 6))
+                else:
+                    p.drawLine(QPointF(rect.left() + 6, rect.top() + h2), QPointF(rect.right() - 6, rect.top() + h2))
+            else:
+                p.drawLine(QPointF(rect.left() + 6, rect.top() + h2), QPointF(rect.right() - 6, rect.top() + h2))
+                p.drawLine(QPointF(rect.left() + w2, rect.top() + 6), QPointF(rect.left() + w2, rect.bottom() - 6))
+
+            label_map = {
+                "clock": "시계",
+                "clock_sec": "시계",
+                "clock12": "시계",
+                "date": "날짜",
+                "volume": "볼륨",
+                "battery": "배터리",
+                "cpu": "CPU",
+                "memory": "메모리",
+            }
+
+            for i, k in enumerate(kinds):
+                if i >= len(cells):
+                    break
+                c_rect = cells[i]
+                big_val, _small_desc, _ = read_info(k)
+                lbl_text = label_map.get(k, INFO_KINDS.get(k, (k,))[0])
+                cw, ch = c_rect.width(), c_rect.height()
+
+                # 작은 라벨 (상단)
+                lbl_rect = QRectF(c_rect.left() + 4, c_rect.top() + ch * 0.12, cw - 8, ch * 0.30)
+                lbl_font_size = max(8.0, min(11.0, ch * 0.22, cw * 0.14))
+                p.setFont(theme.ui_font(lbl_font_size, QFont.DemiBold))
+                fm_lbl = QFontMetrics(p.font())
+                elided_lbl = fm_lbl.elidedText(lbl_text, Qt.ElideRight, max(1, int(lbl_rect.width())))
+                p.setPen(halo)
+                p.drawText(lbl_rect.translated(0, 1), Qt.AlignCenter, elided_lbl)
+                p.setPen(with_alpha(fg, 0.8))
+                p.drawText(lbl_rect, Qt.AlignCenter, elided_lbl)
+
+                # 큰 값 (하단)
+                val_rect = QRectF(c_rect.left() + 2, c_rect.top() + ch * 0.42, cw - 4, ch * 0.48)
+                scale = 0.26 if len(big_val) <= 4 else 0.18
+                val_font_size = max(8.0, min(24.0, ch * 0.42, cw * scale))
+                p.setFont(theme.ui_font(val_font_size, QFont.Bold))
+                fm_val = QFontMetrics(p.font())
+                elided_val = fm_val.elidedText(big_val, Qt.ElideRight, max(1, int(val_rect.width())))
+                p.setPen(halo)
+                p.drawText(val_rect.translated(0, 1), Qt.AlignCenter, elided_val)
+                p.setPen(fg)
+                p.drawText(val_rect, Qt.AlignCenter, elided_val)
 
     def _paint_timer(self, p, rect, radius, fg, halo, tinted):
         """타이머: 남은 시간 크게 + 상태 글자 + 테두리를 따라 줄어드는 고리"""
@@ -630,6 +719,113 @@ class DeckButtonWidget(QWidget):
         fm = QFontMetrics(p.font())
         small_rect = QRectF(rect.left() + 4, rect.top() + rect.height() * 0.65, rect.width() - 8, rect.height() * 0.18)
         p.drawText(small_rect, Qt.AlignCenter, fm.elidedText(small, Qt.ElideRight, int(small_rect.width())))
+
+    def _paint_schedule(self, p, rect, radius, fg, halo, tinted):
+        """예약 버튼: 아이콘 + 이름 + 다음 일정 안내 (큰 버튼이면 오늘 일정 추가)"""
+        from core.schedule_manager import parse_schedule, next_event
+        from datetime import datetime, timedelta
+        d = self.button_data
+        cfg = parse_schedule(d.action_data)
+        now = datetime.now()
+        nxt = next_event(cfg, now)
+
+        if not cfg.get("start") and not cfg.get("end"):
+            next_text = "시각을 정해 주세요"
+        elif nxt:
+            which, dt = nxt
+            which_kr = "시작" if which == "start" else "종료"
+            if dt.date() == now.date():
+                day_kr = "다음"
+            elif dt.date() == (now + timedelta(days=1)).date():
+                day_kr = "내일"
+            else:
+                day_kr = f"{dt.month}/{dt.day}"
+            next_text = f"{day_kr} {dt.strftime('%H:%M')} {which_kr}"
+        else:
+            next_text = "예약 없음"
+
+        is_large = (self.span[0] * self.span[1]) >= 2
+        extra_text = ""
+        if is_large:
+            today_parts = []
+            if cfg.get("start"):
+                today_parts.append(f"{cfg['start']} 시작")
+            if cfg.get("end"):
+                today_parts.append(f"{cfg['end']} 종료")
+            if today_parts:
+                extra_text = "오늘 " + " · ".join(today_parts)
+
+        unit = min(rect.width(), rect.height())
+        default_ico = "calendar" if icons.is_theme_icon("calendar") else "clock"
+        icon_name = d.icon if icons.is_theme_icon(d.icon) else default_ico
+        name_text = d.name.strip() or "예약"
+        wide = rect.width() > rect.height() * 1.4
+
+        if wide:
+            icon_px = min(unit * 0.44, 48.0)
+            icon_rect = QRectF(rect.left() + unit * 0.20, rect.center().y() - icon_px / 2, icon_px, icon_px)
+            icons.paint_icon(p, icon_name, icon_rect, fg, self.icon_style)
+
+            text_left = icon_rect.right() + unit * 0.12
+            text_w = max(10.0, rect.right() - text_left - unit * 0.15)
+
+            p.setFont(theme.ui_font(max(10.0, unit * 0.18), QFont.Bold))
+            fm = QFontMetrics(p.font())
+            name_rect = QRectF(text_left, rect.top() + rect.height() * 0.18, text_w, rect.height() * 0.32)
+            elided_name = fm.elidedText(name_text, Qt.ElideRight, int(text_w))
+            p.setPen(halo)
+            p.drawText(name_rect.translated(0, 1), Qt.AlignLeft | Qt.AlignVCenter, elided_name)
+            p.setPen(fg)
+            p.drawText(name_rect, Qt.AlignLeft | Qt.AlignVCenter, elided_name)
+
+            p.setFont(theme.ui_font(max(8.5, unit * 0.13), QFont.Normal))
+            fm_sub = QFontMetrics(p.font())
+            sub_rect = QRectF(text_left, name_rect.bottom(), text_w, rect.height() * 0.24)
+            elided_sub = fm_sub.elidedText(next_text, Qt.ElideRight, int(text_w))
+            p.setPen(halo)
+            p.drawText(sub_rect.translated(0, 1), Qt.AlignLeft | Qt.AlignVCenter, elided_sub)
+            p.setPen(with_alpha(fg, 0.85))
+            p.drawText(sub_rect, Qt.AlignLeft | Qt.AlignVCenter, elided_sub)
+
+            if extra_text:
+                ex_rect = QRectF(text_left, sub_rect.bottom(), text_w, rect.height() * 0.22)
+                elided_ex = fm_sub.elidedText(extra_text, Qt.ElideRight, int(text_w))
+                p.setPen(halo)
+                p.drawText(ex_rect.translated(0, 1), Qt.AlignLeft | Qt.AlignVCenter, elided_ex)
+                p.setPen(with_alpha(fg, 0.65))
+                p.drawText(ex_rect, Qt.AlignLeft | Qt.AlignVCenter, elided_ex)
+        else:
+            icon_px = unit * 0.34
+            icon_top = rect.top() + rect.height() * 0.12
+            icon_rect = QRectF(rect.center().x() - icon_px / 2, icon_top, icon_px, icon_px)
+            icons.paint_icon(p, icon_name, icon_rect, fg, self.icon_style)
+
+            name_top = icon_rect.bottom() + 4
+            p.setFont(theme.ui_font(max(9.5, unit * 0.15), QFont.Bold))
+            fm = QFontMetrics(p.font())
+            name_rect = QRectF(rect.left() + 4, name_top, rect.width() - 8, unit * 0.20)
+            elided_name = fm.elidedText(name_text, Qt.ElideRight, int(rect.width() - 8))
+            p.setPen(halo)
+            p.drawText(name_rect.translated(0, 1), Qt.AlignCenter, elided_name)
+            p.setPen(fg)
+            p.drawText(name_rect, Qt.AlignCenter, elided_name)
+
+            p.setFont(theme.ui_font(max(8.0, unit * 0.11), QFont.Normal))
+            fm_sub = QFontMetrics(p.font())
+            sub_rect = QRectF(rect.left() + 4, name_rect.bottom() + 1, rect.width() - 8, unit * 0.16)
+            elided_sub = fm_sub.elidedText(next_text, Qt.ElideRight, int(rect.width() - 8))
+            p.setPen(halo)
+            p.drawText(sub_rect.translated(0, 1), Qt.AlignCenter, elided_sub)
+            p.setPen(with_alpha(fg, 0.85))
+            p.drawText(sub_rect, Qt.AlignCenter, elided_sub)
+
+            if extra_text:
+                ex_rect = QRectF(rect.left() + 4, sub_rect.bottom() + 1, rect.width() - 8, unit * 0.15)
+                elided_ex = fm_sub.elidedText(extra_text, Qt.ElideRight, int(rect.width() - 8))
+                p.setPen(halo)
+                p.drawText(ex_rect.translated(0, 1), Qt.AlignCenter, elided_ex)
+                p.setPen(with_alpha(fg, 0.65))
+                p.drawText(ex_rect, Qt.AlignCenter, elided_ex)
 
     def _can_hold(self) -> bool:
         d = self.button_data

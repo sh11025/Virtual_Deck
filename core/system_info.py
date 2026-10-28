@@ -7,7 +7,7 @@ import sys
 import time
 import ctypes
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 from core import audio_state
 
@@ -16,6 +16,8 @@ IS_WINDOWS = sys.platform == "win32"
 # 종류 → (화면 이름, 테마 아이콘 이름)
 INFO_KINDS = {
     "clock": ("시계", "clock"),
+    "clock_sec": ("시계(초 포함)", "clock"),
+    "clock12": ("시계(오전/오후)", "clock"),
     "date": ("날짜", "calendar"),
     "volume": ("볼륨 %", "volume_up"),
     "battery": ("배터리", "power"),
@@ -105,6 +107,13 @@ def _read(kind: str) -> Tuple[str, str, Optional[float]]:
     now = datetime.now()
     if kind == "clock":
         return now.strftime("%H:%M"), f"{now.month}/{now.day} ({WEEKDAYS[now.weekday()]})", None
+    if kind == "clock_sec":
+        return now.strftime("%H:%M:%S"), f"{now.month}/{now.day} ({WEEKDAYS[now.weekday()]})", None
+    if kind == "clock12":
+        am_pm = "오전" if now.hour < 12 else "오후"
+        h = now.hour % 12
+        h = 12 if h == 0 else h
+        return f"{am_pm} {h}:{now.minute:02d}", f"{now.month}/{now.day} ({WEEKDAYS[now.weekday()]})", None
     if kind == "date":
         return f"{now.month}.{now.day}", f"{WEEKDAYS[now.weekday()]}요일", None
     if kind == "volume":
@@ -125,3 +134,29 @@ def _read(kind: str) -> Tuple[str, str, Optional[float]]:
         v = _memory_percent()
         return (f"{v}%" if v is not None else "–"), "메모리", (v / 100 if v is not None else None)
     return "?", kind, None
+
+
+def parse_kinds(action_data: str, limit: int = 4) -> List[str]:
+    """action_data 에서 종류 목록을 읽어옵니다. (쉼표 분리, 유효성 검사, 중복 제거, limit 개 제한)"""
+    raw = (action_data or "").split(",")
+    seen = set()
+    res = []
+    for item in raw:
+        k = item.strip()
+        if k in INFO_KINDS and k not in seen:
+            seen.add(k)
+            res.append(k)
+            if len(res) >= limit:
+                break
+    return res if res else ["clock"]
+
+
+def capacity(span_cols: int, span_rows: int) -> int:
+    """버튼 크기(칸 수)에 따라 보여줄 수 있는 정보 개수 (1칸 1개, 2칸 2개, 3칸 이상 4개)"""
+    cells = span_cols * span_rows
+    if cells <= 1:
+        return 1
+    if cells == 2:
+        return 2
+    return 4
+

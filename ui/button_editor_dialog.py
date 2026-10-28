@@ -8,11 +8,11 @@
 import os
 from urllib.parse import urlparse
 
-from PySide6.QtCore import Qt, Signal, QRectF
+from PySide6.QtCore import Qt, Signal, QRectF, QTime
 from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QStackedWidget,
-    QFileDialog, QScrollArea, QFrame, QSizePolicy,
+    QFileDialog, QScrollArea, QFrame, QSizePolicy, QCheckBox, QGridLayout, QTimeEdit,
 )
 
 from core import paths
@@ -129,6 +129,7 @@ class ActionEditor(QWidget):
         self.combo.currentIndexChanged.connect(self._on_type)
         lay.addWidget(self.combo)
         self.stack = QStackedWidget()
+        self.stack.currentChanged.connect(lambda _i: self._fit_stack_to_current())
         lay.addWidget(self.stack)
         self.pages = {}
         for t in types:
@@ -136,6 +137,12 @@ class ActionEditor(QWidget):
             self.pages[t] = page
             self.stack.addWidget(page)
         self._on_type(0)
+        self._fit_stack_to_current()
+
+    def _fit_stack_to_current(self):
+        page = self.stack.currentWidget()
+        if page is not None:
+            self.stack.setFixedHeight(self._calc_page_height(page))
 
     def _path_page(self, kind, placeholder, hint):
         w = QWidget()
@@ -212,18 +219,29 @@ class ActionEditor(QWidget):
             return w
         if t == "timer":
             return self._timer_page()
+        if t == "schedule":
+            return self._schedule_page()
         if t == "info":
             from core.system_info import INFO_KINDS
             w = QWidget()
             v = QVBoxLayout(w)
             v.setContentsMargins(0, 0, 0, 0)
-            combo = no_wheel(QComboBox())
-            for key, (label, _icon) in INFO_KINDS.items():
-                combo.addItem(label, key)
-            combo.currentIndexChanged.connect(lambda _: self.changed.emit())
-            v.addWidget(combo)
-            v.addWidget(hint_label("버튼에 값이 1초마다 새로 보여요. 볼륨 %는 소리 기능 추가 설치가 필요해요."))
-            w.combo = combo
+            v.setSpacing(4)
+            v.addWidget(hint_label("큰 버튼일수록 여러 개 보여요 (1칸 1개 · 2칸 2개 · 4칸 4개)"))
+            grid = QGridLayout()
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setHorizontalSpacing(6)
+            grid.setVerticalSpacing(2)
+            w.checkboxes = {}
+            for idx, (key, (label, _icon)) in enumerate(INFO_KINDS.items()):
+                cb = QCheckBox(label)
+                cb.toggled.connect(lambda *_: self._on_info_toggled())
+                w.checkboxes[key] = cb
+                grid.addWidget(cb, idx // 2, idx % 2)
+            v.addLayout(grid)
+            w.limit_hint = hint_label("")
+            w.limit_hint.setVisible(False)
+            v.addWidget(w.limit_hint)
             return w
         if t == "group":
             w = QWidget()
@@ -244,10 +262,106 @@ class ActionEditor(QWidget):
             v.addWidget(hint_label("누르면 이 프로필로 이동해요. 직접 고른 프로필은 다른 프로그램으로 옮겨 갈 때까지 유지돼요."))
             w.combo = combo
             return w
+        if t == "back":
+            w = QWidget()
+            v = QVBoxLayout(w)
+            v.setContentsMargins(0, 0, 0, 0)
+            v.addWidget(hint_label("눌러서 묶음에서 나가요."))
+            return w
         w = QWidget()
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
         v.addWidget(hint_label(none_hint))
+        return w
+
+    def _schedule_page(self):
+        """예약 설정: 시작/종료 시각, 동작 종류, 요일 선택"""
+        from core.action_executor import ACTION_LABELS
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(4)
+
+        # 1. 시작 설정: [☑ 시작] [시각] [종류 콤보] 한 줄, 그 아래 [내용 입력칸] 한 줄
+        w.start_enable = QCheckBox("시작")
+        w.start_time = QTimeEdit()
+        w.start_time.setDisplayFormat("HH:mm")
+        w.start_time.setTime(QTime(9, 0))
+        w.start_type = no_wheel(QComboBox())
+        w.start_type.setMinimumContentsLength(4)
+        w.start_type.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        for k in ("program", "url", "file", "folder", "shortcut", "media"):
+            w.start_type.addItem(ACTION_LABELS.get(k, k), k)
+        w.start_data = QLineEdit()
+        w.start_data.setPlaceholderText("실행할 프로그램 경로, 주소 등")
+
+        row1 = QHBoxLayout()
+        row1.setSpacing(4)
+        row1.addWidget(w.start_enable)
+        row1.addWidget(w.start_time)
+        row1.addWidget(w.start_type, 1)
+        v.addLayout(row1)
+        v.addWidget(w.start_data)
+
+        # 2. 종료 설정: [☑ 종료] [시각] [종류 콤보] 한 줄, 그 아래 [내용 입력칸] 한 줄
+        w.end_enable = QCheckBox("종료")
+        w.end_time = QTimeEdit()
+        w.end_time.setDisplayFormat("HH:mm")
+        w.end_time.setTime(QTime(18, 0))
+        w.end_type = no_wheel(QComboBox())
+        w.end_type.setMinimumContentsLength(4)
+        w.end_type.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        for k in ("close", "program", "url", "file", "folder", "shortcut", "media"):
+            w.end_type.addItem(ACTION_LABELS.get(k, k), k)
+        w.end_data = QLineEdit()
+        w.end_data.setPlaceholderText("종료할 프로그램 등 (비우면 시작 프로그램 닫기)")
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(4)
+        row2.addWidget(w.end_enable)
+        row2.addWidget(w.end_time)
+        row2.addWidget(w.end_type, 1)
+        v.addLayout(row2)
+        v.addWidget(w.end_data)
+
+        # 3. 요일 체크박스 7개 (월~일, 간격 4px)
+        row_days = QHBoxLayout()
+        row_days.setSpacing(4)
+        w.day_cbs = []
+        for name in ("월", "화", "수", "목", "금", "토", "일"):
+            cb = QCheckBox(name)
+            cb.setChecked(True)
+            cb.toggled.connect(lambda *_: self.changed.emit())
+            w.day_cbs.append(cb)
+            row_days.addWidget(cb)
+        row_days.addStretch(1)
+        v.addLayout(row_days)
+
+        info_lbl = hint_label("켜져 있을 때만 실행돼요. 놓친 시각은 건너뛰어요.")
+        info_lbl.setWordWrap(False)
+        v.addWidget(info_lbl)
+
+        def _sync_enabled(*_):
+            st_on = w.start_enable.isChecked()
+            w.start_time.setEnabled(st_on)
+            w.start_type.setEnabled(st_on)
+            w.start_data.setEnabled(st_on)
+            et_on = w.end_enable.isChecked()
+            w.end_time.setEnabled(et_on)
+            w.end_type.setEnabled(et_on)
+            w.end_data.setEnabled(et_on)
+            self.changed.emit()
+
+        w.start_enable.toggled.connect(_sync_enabled)
+        w.end_enable.toggled.connect(_sync_enabled)
+        w.start_time.timeChanged.connect(lambda _: self.changed.emit())
+        w.end_time.timeChanged.connect(lambda _: self.changed.emit())
+        w.start_type.currentIndexChanged.connect(lambda _: self.changed.emit())
+        w.end_type.currentIndexChanged.connect(lambda _: self.changed.emit())
+        w.start_data.textChanged.connect(lambda _: self.changed.emit())
+        w.end_data.textChanged.connect(lambda _: self.changed.emit())
+
+        _sync_enabled()
         return w
 
     def _timer_page(self):
@@ -255,19 +369,19 @@ class ActionEditor(QWidget):
         w = QWidget()
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(8)
+        v.setSpacing(4)
         w.mode = SegmentedTabs(["⏳  카운트다운", "⏱  스톱워치"])
         v.addWidget(w.mode)
         w.count_box = QWidget()
         cb = QVBoxLayout(w.count_box)
         cb.setContentsMargins(0, 0, 0, 0)
-        cb.setSpacing(8)
+        cb.setSpacing(4)
         presets = QVBoxLayout()
-        presets.setSpacing(6)
+        presets.setSpacing(4)
         row1 = QHBoxLayout()
-        row1.setSpacing(6)
+        row1.setSpacing(4)
         row2 = QHBoxLayout()
-        row2.setSpacing(6)
+        row2.setSpacing(4)
         for i, (label, sec) in enumerate((("1분", 60), ("3분", 180), ("5분", 300), ("10분", 600), ("25분", 1500), ("1시간", 3600))):
             b = GlassButton(label)
             b.clicked.connect(lambda _=False, s_=sec: self._set_timer_seconds(w, s_))
@@ -292,14 +406,14 @@ class ActionEditor(QWidget):
         w.sound.toggled.connect(lambda _: self.changed.emit())
         sr.addWidget(w.sound)
         cb.addLayout(sr)
-        cb.addWidget(hint_label("끝나면 할 일 (선택): 예) 끝나면 음악 일시정지, 메모장 열기"))
+        cb.addWidget(hint_label("끝나면 할 일 (선택)"))
         w.then = ActionEditor(["none", "url", "program", "file", "folder", "shortcut", "media", "macro"],
                               none_hint="끝나면 소리와 알림만 보여 줘요.")
         w.then.changed.connect(self._refit)
         w.then.changed.connect(lambda: self.changed.emit())
         cb.addWidget(w.then)
         v.addWidget(w.count_box)
-        v.addWidget(hint_label("누르면 시작 / 일시정지, 길게 누르면 처음으로. 버튼판을 숨겨도 계속 흘러가요."))
+        v.addWidget(hint_label("누르면 시작·일시정지, 길게 누르면 처음으로"))
         w.mode.currentChanged.connect(lambda i: (w.count_box.setVisible(i == 0), self._refit(), self.changed.emit()))
         self._set_timer_seconds(w, 300)   # 기본 5분
         return w
@@ -326,9 +440,7 @@ class ActionEditor(QWidget):
         return base_h
 
     def _refit(self, *_):
-        page = self.stack.currentWidget()
-        if page is not None:
-            self.stack.setFixedHeight(self._calc_page_height(page))
+        self._fit_stack_to_current()
 
     def _browse(self, kind, edit):
         if kind == "folder":
@@ -379,8 +491,29 @@ class ActionEditor(QWidget):
         t = self.combo.itemData(idx)
         if t in self.pages:
             self.stack.setCurrentWidget(self.pages[t])
-            page = self.pages[t]
-            self.stack.setFixedHeight(self._calc_page_height(page))
+            self._fit_stack_to_current()
+        self.changed.emit()
+
+    def set_span(self, cols: int, rows: int):
+        self._span = (cols, rows)
+        self._update_info_hint()
+
+    def _update_info_hint(self):
+        page = self.pages.get("info")
+        if page is None or not hasattr(page, "checkboxes"):
+            return
+        from core.system_info import capacity
+        cap = capacity(*getattr(self, "_span", (1, 1)))
+        checked_count = sum(1 for cb in page.checkboxes.values() if cb.isChecked())
+        if checked_count > cap:
+            page.limit_hint.setText(f"지금 크기에서는 앞의 {cap}개만 보여요")
+            page.limit_hint.setVisible(True)
+        else:
+            page.limit_hint.setVisible(False)
+        self._refit()
+
+    def _on_info_toggled(self):
+        self._update_info_hint()
         self.changed.emit()
 
     def current_type(self) -> str:
@@ -393,10 +526,16 @@ class ActionEditor(QWidget):
             return t, page.edit.text().strip()
         if t == "shortcut":
             return t, page.value()
-        if t in ("media", "info"):
+        if t == "media":
             return t, page.combo.currentData()
+        if t == "info":
+            from core.system_info import INFO_KINDS
+            selected = [k for k in INFO_KINDS if page.checkboxes.get(k) and page.checkboxes[k].isChecked()]
+            return t, ",".join(selected) if selected else "clock"
         if t == "profile":
             return t, page.combo.currentData() or ""
+        if t == "back":
+            return t, ""
         if t == "timer":
             from core.timer_manager import dump_timer
             then_t, then_d = page.then.value()
@@ -405,6 +544,20 @@ class ActionEditor(QWidget):
                 "seconds": max(1, page.minutes.value() * 60 + page.seconds.value()),
                 "sound": page.sound.isChecked(),
                 "then_type": then_t if then_d else "none", "then_data": then_d if then_d else "",
+            })
+        if t == "schedule":
+            from core.schedule_manager import dump_schedule
+            days = [i for i, cb in enumerate(page.day_cbs) if cb.isChecked()]
+            if not days:
+                days = [0, 1, 2, 3, 4, 5, 6]
+            return t, dump_schedule({
+                "start": page.start_time.time().toString("HH:mm") if page.start_enable.isChecked() else "",
+                "start_type": page.start_type.currentData(),
+                "start_data": page.start_data.text().strip(),
+                "end": page.end_time.time().toString("HH:mm") if page.end_enable.isChecked() else "",
+                "end_type": page.end_type.currentData(),
+                "end_data": page.end_data.text().strip(),
+                "days": days,
             })
         if t == "macro":
             return t, self.macro_json if parse_steps(self.macro_json) else ""
@@ -422,9 +575,17 @@ class ActionEditor(QWidget):
             page.edit.setText(data)
         elif t == "shortcut":
             page.set_value(data)
-        elif t in ("media", "info"):
+        elif t == "media":
             i = page.combo.findData(data)
             page.combo.setCurrentIndex(max(0, i))
+        elif t == "info":
+            from core.system_info import parse_kinds, INFO_KINDS
+            selected_set = set(parse_kinds(data, len(INFO_KINDS)))
+            for k, cb in page.checkboxes.items():
+                cb.blockSignals(True)
+                cb.setChecked(k in selected_set)
+                cb.blockSignals(False)
+            self._update_info_hint()
         elif t == "profile":
             i = page.combo.findData(data)
             if i >= 0:
@@ -434,6 +595,8 @@ class ActionEditor(QWidget):
             else:
                 page.combo.addItem("(없는 프로필)", data)
                 page.combo.setCurrentIndex(page.combo.count() - 1)
+        elif t == "back":
+            pass
         elif t == "timer":
             from core.timer_manager import parse_timer
             cfg = parse_timer(data)
@@ -442,6 +605,46 @@ class ActionEditor(QWidget):
             self._set_timer_seconds(page, cfg["seconds"])
             page.sound.setChecked(bool(cfg.get("sound", True)))
             page.then.set_value(cfg.get("then_type", "none"), cfg.get("then_data", ""))
+            self._refit()
+        elif t == "schedule":
+            from core.schedule_manager import parse_schedule
+            cfg = parse_schedule(data)
+            page.start_enable.setChecked(bool(cfg.get("start")))
+            if cfg.get("start"):
+                try:
+                    h, m = map(int, cfg["start"].split(":"))
+                    page.start_time.setTime(QTime(h, m))
+                except Exception:
+                    pass
+            idx_st = page.start_type.findData(cfg.get("start_type", "program"))
+            page.start_type.setCurrentIndex(max(0, idx_st))
+            page.start_data.setText(cfg.get("start_data", ""))
+
+            page.end_enable.setChecked(bool(cfg.get("end")))
+            if cfg.get("end"):
+                try:
+                    h, m = map(int, cfg["end"].split(":"))
+                    page.end_time.setTime(QTime(h, m))
+                except Exception:
+                    pass
+            idx_et = page.end_type.findData(cfg.get("end_type", "close"))
+            page.end_type.setCurrentIndex(max(0, idx_et))
+            page.end_data.setText(cfg.get("end_data", ""))
+
+            days_set = set(cfg.get("days", [0, 1, 2, 3, 4, 5, 6]))
+            for i, cb in enumerate(page.day_cbs):
+                cb.blockSignals(True)
+                cb.setChecked(i in days_set)
+                cb.blockSignals(False)
+
+            st_on = page.start_enable.isChecked()
+            page.start_time.setEnabled(st_on)
+            page.start_type.setEnabled(st_on)
+            page.start_data.setEnabled(st_on)
+            et_on = page.end_enable.isChecked()
+            page.end_time.setEnabled(et_on)
+            page.end_type.setEnabled(et_on)
+            page.end_data.setEnabled(et_on)
             self._refit()
         elif t == "macro":
             self.macro_json = data or "[]"
@@ -642,7 +845,7 @@ class IconPicker(QWidget):
 
 
 class ButtonEditorDialog(GlassDialog):
-    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "macro", "group", "profile", "info", "timer"]
+    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "macro", "group", "profile", "back", "info", "timer", "schedule"]
     SPANS = [(1, 1), (2, 1), (1, 2), (2, 2)]
     OFF_TYPES = ["none", "close", "url", "program", "file", "folder", "shortcut", "media", "macro", "profile"]
 
@@ -672,7 +875,7 @@ class ButtonEditorDialog(GlassDialog):
         left_content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         left_v = QVBoxLayout(left_content)
         left_v.setContentsMargins(2, 0, 8, 0)
-        left_v.setSpacing(10)
+        left_v.setSpacing(6)
         left_scroll.setWidget(left_content)
         self.left_scroll = left_scroll
         self.left_content = left_content
@@ -723,7 +926,7 @@ class ButtonEditorDialog(GlassDialog):
         # 3. 버튼 크기
         left_v.addWidget(section_label("버튼 크기"))
         self.span_tabs = SegmentedTabs(["1칸", "가로 2칸", "세로 2칸", "4칸"])
-        self.span_tabs.currentChanged.connect(lambda _: self._update_preview())
+        self.span_tabs.currentChanged.connect(self._on_span_changed)
         left_v.addWidget(self.span_tabs)
         left_v.addWidget(hint_label("큰 버튼이 덮는 칸의 기존 버튼은 숨겨집니다."))
 
@@ -852,7 +1055,7 @@ class ButtonEditorDialog(GlassDialog):
         self._load()
         avail = (parent.screen() if parent else QApplication.primaryScreen()).availableGeometry()
         dialog_w = min(900, int(avail.width() * 0.92))
-        dialog_h = min(int(avail.height() * 0.9), 820)
+        dialog_h = min(int(avail.height() * 0.95), 980)
         self.resize(dialog_w, dialog_h)
 
     def _refresh_profile_lists(self):
@@ -907,14 +1110,15 @@ class ButtonEditorDialog(GlassDialog):
         self.colors.set_current(d.color)
         self.icon_colors.set_current(d.icon_color or "auto")
         self.action.set_value(d.action_type if d.action_type != "none" else "url", d.action_data)
-        is_profile = (self.action.get_type() == "profile")
-        self.toggle.setEnabled(not is_profile)
+        is_no_toggle = (self.action.get_type() in ("profile", "back", "schedule"))
+        self.toggle.setEnabled(not is_no_toggle)
         if hasattr(self, "toggle_lbl"):
-            self.toggle_lbl.setEnabled(not is_profile)
-        self.toggle.setChecked(False if is_profile else d.toggle)
+            self.toggle_lbl.setEnabled(not is_no_toggle)
+        self.toggle.setChecked(False if is_no_toggle else d.toggle)
         self.off_action.set_value(d.off_action_type, d.off_action_data)
         self.hold_action.set_value(d.hold_action_type, d.hold_action_data)
         span = (d.span_cols, d.span_rows)
+        self.action.set_span(*span)
         self.span_tabs.setCurrentIndex(self.SPANS.index(span) if span in self.SPANS else 0, animate=False)
         self.off_box.setVisible(self.toggle.isChecked())
         self.clear_btn.setVisible(not d.is_empty())
@@ -1000,8 +1204,8 @@ class ButtonEditorDialog(GlassDialog):
 
     def _on_action_changed(self, *_):
         act_type = self.action.get_type()
-        is_profile = (act_type == "profile")
-        if is_profile:
+        is_no_toggle = (act_type in ("profile", "back", "schedule"))
+        if is_no_toggle:
             self.toggle.setChecked(False)
             self.toggle.setEnabled(False)
             if hasattr(self, "toggle_lbl"):
@@ -1028,6 +1232,8 @@ class ButtonEditorDialog(GlassDialog):
             self.icon_value = ""
             self.picker.theme_grid.set_current(icons.default_icon_for(t, data))
         self._update_preview()
+        if self.layout():
+            self.layout().activate()
 
     def _icon_is_auto(self) -> bool:
         return not self._manual_icon or not (self.icon_value or "").strip()
@@ -1064,7 +1270,7 @@ class ButtonEditorDialog(GlassDialog):
 
     @staticmethod
     def _auto_name(t, data, app_name="") -> str:
-        if not data and t != "group":
+        if not data and t not in ("group", "back", "schedule"):
             return ""
         if t == "url":
             text = data if "://" in data else "https://" + data
@@ -1089,13 +1295,22 @@ class ButtonEditorDialog(GlassDialog):
             if data == "__prev__":
                 return "이전 프로필"
             return "프로필"
+        if t == "back":
+            return "나가기"
         if t == "info":
             return ""
+        if t == "schedule":
+            return "예약"
         if t == "timer":
             from core.timer_manager import parse_timer, format_seconds
             cfg = parse_timer(data)
             return "스톱워치" if cfg["mode"] == "stopwatch" else format_seconds(cfg["seconds"]) + " 타이머"
         return ""
+
+    def _on_span_changed(self, idx: int):
+        sc, sr = self.SPANS[idx]
+        self.action.set_span(sc, sr)
+        self._update_preview()
 
     def _update_preview(self, *_):
         d = self.result_data()
@@ -1104,6 +1319,8 @@ class ButtonEditorDialog(GlassDialog):
             self.preview.set_info(read_info(d.action_data))
         elif d.action_type == "timer":
             self.preview.set_timer_view(None)
+        elif d.action_type == "schedule":
+            self.preview.update()
         self.preview.update_data(d)
 
     # ------------------------------------------------------------ 아이콘 가져오기
@@ -1148,7 +1365,7 @@ class ButtonEditorDialog(GlassDialog):
 
     def _on_save(self):
         t, data = self.action.value()
-        if t not in ("group", "info", "timer") and not data:
+        if t not in ("group", "info", "timer", "back") and not data:
             names = {"url": "웹 주소", "program": "프로그램", "file": "파일", "folder": "폴더",
                      "shortcut": "단축키", "media": "미디어 동작", "macro": "연속 동작 순서",
                      "profile": "프로필"}
@@ -1163,11 +1380,14 @@ class ButtonEditorDialog(GlassDialog):
             if ot != "none" and not od:
                 inform(self, "내용이 비어 있어요", "켜진 상태에서 할 일을 정하거나 ‘아무것도 안 함’으로 바꿔 주세요.")
                 return
-        if not self.name_edit.text().strip() and t == "profile":
-            page = self.action.pages.get("profile")
-            if page and hasattr(page, "combo"):
-                txt = page.combo.currentText()
-                clean = txt.replace("▶ ", "").replace("◀ ", "").strip()[:12]
-                if clean:
-                    self.name_edit.setText(clean)
+        if not self.name_edit.text().strip():
+            if t == "profile":
+                page = self.action.pages.get("profile")
+                if page and hasattr(page, "combo"):
+                    txt = page.combo.currentText()
+                    clean = txt.replace("▶ ", "").replace("◀ ", "").strip()[:12]
+                    if clean:
+                        self.name_edit.setText(clean)
+            elif t == "back":
+                self.name_edit.setText("나가기")
         self.accept()

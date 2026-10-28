@@ -48,7 +48,7 @@ class DeckButtonData:
         return self.hold_action_type not in ("", "none") and bool(self.hold_action_data)
 
     def is_empty(self) -> bool:
-        if self.action_type in ("group", "info"):
+        if self.action_type in ("group", "info", "back"):
             return False
         return self.action_type == "none" or not self.action_data
 

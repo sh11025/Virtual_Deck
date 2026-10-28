@@ -178,6 +178,40 @@ def keep_topmost(hwnd: int, enable: bool = True) -> bool:
         return False
 
 
+def bring_to_front(hwnd: int, keep_on_top: bool) -> bool:
+    """창을 활성화하지 않고 다른 창들 맨 앞으로 올립니다."""
+    if not IS_WINDOWS or not hwnd:
+        return False
+    try:
+        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+        ok = bool(user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags))
+        if not keep_on_top:
+            ok = bool(user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)) and ok
+        return ok
+    except Exception:
+        return False
+
+
+def is_visible_on_top(hwnd: int) -> bool:
+    """창의 가운데 지점에서 맨 앞에 보이는 창이 이 창(또는 이 창의 자식/소유 창)인지."""
+    if not IS_WINDOWS or not hwnd:
+        return True
+    try:
+        from ctypes import wintypes
+        rect = wintypes.RECT()
+        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+            return True
+        pt = wintypes.POINT((rect.left + rect.right) // 2, (rect.top + rect.bottom) // 2)
+        top = user32.WindowFromPoint(pt)
+        if not top:
+            return True
+        root = user32.GetAncestor(top, 2)   # GA_ROOT
+        return int(root or top) == int(hwnd)
+    except Exception:
+        return True
+
+
+
 def set_exclude_from_capture(hwnd: int, exclude: bool) -> bool:
     """
     화면 캡처에서 이 창을 빼도록 설정합니다(Windows 10 2004 이상).

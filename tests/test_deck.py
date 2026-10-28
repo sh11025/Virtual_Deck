@@ -42,6 +42,7 @@ from services.storage_service import StorageService  # noqa: E402
 
 # ---- 실제 동작은 가짜로 (키 보내기, 전역 단축키 등록 없음)
 executed = []
+REAL_EXECUTE = AE.ActionExecutor.execute
 AE.ActionExecutor.execute = staticmethod(lambda t, d: (executed.append((t, d)) or (True, "ok")))
 SI.GlobalHotkey.register = lambda self, hwnd, sc: False
 import core.app_finder as AF  # noqa: E402
@@ -107,6 +108,26 @@ check(w.current_profile.buttons["btn_2_0"].children["btn_0_0"].name == "안쪽",
 w.save()
 cfg, profs, cur = st.load_data()
 check(profs[cur].buttons["btn_2_0"].children["btn_0_0"].name == "안쪽", "저장 후 다시 읽기")
+
+# 나가기(back) 버튼 테스트
+btn_back_test = B("btn_back", "나가기", "icon:back", "back", "", 0, 1)
+w.current_profile.buttons["btn_2_0"].children["btn_back"] = btn_back_test
+w.folder_id = "btn_2_0"
+w._handle_click("btn_back")
+check(w.folder_id is None, "묶음 안에서 back 버튼 누르면 묶음에서 나감 (folder_id is None)")
+
+# 묶음 밖에서 back 버튼 클릭
+w.current_buttons()["btn_back_root"] = B("btn_back_root", "나가기", "icon:back", "back", "", 0, 1)
+w._handle_click("btn_back_root")
+check(w.folder_id is None, "묶음 밖에서 back 버튼 눌러도 오류 없이 folder_id is None")
+
+# ActionExecutor, describe_action, to_dict/from_dict 검사
+check(REAL_EXECUTE("back", "") == (True, ""), "ActionExecutor.execute('back', '') == (True, '')")
+check(REAL_EXECUTE("schedule", "") == (True, ""), "ActionExecutor.execute('schedule', '') == (True, '')")
+check(REAL_EXECUTE("url", "")[0] is False, "내용이 비면 url 은 실패")
+check("나가기" in AE.describe_action("back", ""), "describe_action('back', '') 에 '나가기' 포함됨")
+b_rt = DeckButtonData.from_dict(btn_back_test.to_dict())
+check(b_rt.action_type == "back", "to_dict -> from_dict 왕복 후에도 action_type 가 'back'")
 
 check(st.count_outside(w.profiles, 2, 2) > 0, "칸 줄일 때 지워질 버튼 세기")
 p2 = {k: v.copy() for k, v in w.profiles.items()}
@@ -256,6 +277,18 @@ steps = rec.stop()
 check(steps == [{"type": "text", "value": "hi"}, {"type": "shortcut", "value": "Ctrl + S"},
                 {"type": "shortcut", "value": "Enter"}], f"매크로 녹화: {steps}")
 
+# wait_until 및 시간/단위 검사
+from datetime import datetime  # noqa: E402
+from core.macro_manager import seconds_until, ms_to_unit, unit_to_ms, parse_steps  # noqa: E402
+
+check(seconds_until("09:30", datetime(2026, 1, 1, 9, 0)) == 1800, "seconds_until 같은 날 30분 차이 (1800초)")
+check(seconds_until("09:30", datetime(2026, 1, 1, 10, 0)) == 23.5 * 3600, "seconds_until 이미 지난 시각은 내일 (23.5시간)")
+check(seconds_until("abc") is None and seconds_until("25:61") is None, "seconds_until 잘못된 형식은 None")
+check(ms_to_unit(600000) == (10, "분") and unit_to_ms(10, "분") == 600000, "단위 환산 600000 ↔ (10, '분') 왕복 일치")
+check(ms_to_unit(1500) == (1500, "밀리초") and unit_to_ms(1500, "밀리초") == 1500, "단위 환산 1500 ↔ (1500, '밀리초') 왕복 일치")
+parsed_wait = parse_steps(json.dumps([{"type": "wait_until", "value": "09:30"}]))
+check(len(parsed_wait) == 1 and parsed_wait[0] == {"type": "wait_until", "value": "09:30"}, "parse_steps 가 wait_until 단계를 그대로 읽음")
+
 # ====================================================================
 section("타이머 · 스톱워치")
 from core.timer_manager import TimerManager, dump_timer, parse_timer, format_seconds  # noqa: E402
@@ -378,6 +411,26 @@ snap_left = w._snapped(QPoint(avail.left() - combo.left() + 10, 300))
 check(snap_left.x() + combo.left() == avail.left() + 6, f"SS 3x3 왼쪽 끝 스냅 시 합친 사각형 스냅 ({snap_left.x() + combo.left()})")
 check(snap_left.x() + w.header_bar.x() >= avail.left() + 6, f"SS 3x3 왼쪽 끝 스냅 시 header_bar 왼쪽 변이 화면 안 ({snap_left.x() + w.header_bar.x()})")
 
+# ====================================================================
+section("트레이 숨기기 및 안 쓸 때 흐려지기 연동")
+from PySide6.QtCore import QPropertyAnimation  # noqa: E402
+orig_auto_fade = w.config.auto_fade
+try:
+    w.config.auto_fade = True
+    w._fade_timer.start(50)
+    w.hide_to_tray()
+    check(w._fade_timer.isActive() is False, "hide_to_tray() 후 _fade_timer 가 멈춤")
+
+    w.show_deck()
+    check(abs(w.windowOpacity() - w.config.opacity) < 0.02, "show_deck() 후 창 투명도가 config.opacity 로 복원됨")
+
+    w._fade_anim.setEndValue(0.1)
+    w._fade_anim.start()
+    w.hide_to_tray()
+    check(w._fade_anim.state() != QPropertyAnimation.State.Running, "hide_to_tray() 후 _fade_anim 이 Running 이 아님")
+finally:
+    w.config.auto_fade = orig_auto_fade
+    w.show_deck()
 
 # ====================================================================
 section("모달 없는 대화상자 (환경설정·버튼 설정)")
@@ -1169,19 +1222,37 @@ chips_icon.set_current("모르는이름")
 check(chips_icon.current == chips_icon.keys[0], "모르는 이름 선택 시 첫 번째 키 선택")
 
 # 6. ColorChips 가짜 선택창 검사
+from ui.widgets import pick_color  # noqa: E402
+check(callable(pick_color), "pick_color 함수 존재 및 호출 가능")
+
 import ui.widgets as widgets_mod  # noqa: E402
-orig_get_color = widgets_mod.QColorDialog.getColor
+orig_pick_color = widgets_mod.pick_color
 try:
-    widgets_mod.QColorDialog.getColor = lambda *args, **kwargs: QColor("#34c759")
+    widgets_mod.pick_color = lambda parent, initial, title="색 고르기": QColor("#34c759")
     chips._pick_custom()
-    check(chips.current == "#34c759" and "#34c759" in chips.custom, "가짜 getColor 선택 색상 추가 및 선택")
+    check(chips.current == "#34c759" and "#34c759" in chips.custom, "가짜 pick_color 선택 색상 추가 및 선택")
     cur_before = chips.current
     custom_before = list(chips.custom)
-    widgets_mod.QColorDialog.getColor = lambda *args, **kwargs: QColor()
+    widgets_mod.pick_color = lambda parent, initial, title="색 고르기": None
     chips._pick_custom()
-    check(chips.current == cur_before and chips.custom == custom_before, "getColor 취소 시 색상 변경 없음")
+    check(chips.current == cur_before and chips.custom == custom_before, "pick_color 취소(None) 시 색상 변경 없음")
 finally:
-    widgets_mod.QColorDialog.getColor = orig_get_color
+    widgets_mod.pick_color = orig_pick_color
+
+# settings_dialog 쪽 ColorSwatch 검사
+from ui.settings_dialog import ColorSwatch  # noqa: E402
+import ui.settings_dialog as settings_mod  # noqa: E402
+swatch = ColorSwatch("#112233")
+orig_swatch_pick = settings_mod.pick_color
+try:
+    settings_mod.pick_color = lambda parent, initial, title="색 고르기": QColor("#ff5500")
+    swatch._pick()
+    check(swatch.color == "#ff5500", "ColorSwatch pick_color 선택 반영")
+    settings_mod.pick_color = lambda parent, initial, title="색 고르기": None
+    swatch._pick()
+    check(swatch.color == "#ff5500", "ColorSwatch pick_color 취소(None) 시 유지")
+finally:
+    settings_mod.pick_color = orig_swatch_pick
 
 # 7. 오른쪽 클릭 메뉴 검사
 orig_glass_menu = widgets_mod.glass_menu
@@ -1220,19 +1291,35 @@ try:
 finally:
     bedit_dlg.close()
 
-# 9. 글자색 label_color 및 명암비 검사
-from ui.deck_button import label_color  # noqa: E402
+# 9. 글자색 label_color 검사 (글자색 == 아이콘색)
+from ui.deck_button import label_color, icon_color_for  # noqa: E402
 d_lbl = DeckButtonData(id="btn_lbl", name="라벨", icon_color="auto")
-check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#112233", "아이콘 색 auto 일 때 글자색 fg 유지")
-d_lbl.icon_color = "#1b2a49"
-check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#1b2a49", "어두운 아이콘 색 글자색 적용")
-d_lbl.icon_color = "#ffe66d"
-check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#1f2937", "밝은 아이콘 색은 흰 배경에서 가독성 보정(#1f2937)")
+fg_sample = QColor("#112233")
+face_sample = QColor("#ffffff")
+check(label_color(d_lbl, face_sample, fg_sample) == fg_sample, "icon_color='auto' 이면 label_color == fg")
+d_lbl.icon_color = "purple"
+check(label_color(d_lbl, face_sample, fg_sample).name() == icon_color_for(d_lbl, fg_sample).name(),
+      "icon_color='purple' 이면 label_color(...).name() == icon_color_for(...).name()")
 d_lbl.icon_color = "모르는이름"
-check(label_color(d_lbl, QColor("#ffffff"), QColor("#112233")).name() == "#112233", "모르는 아이콘 색 이름은 fg 유지")
-check(round(theme.contrast_ratio(QColor("#ffffff"), QColor("#000000")), 1) == 21.0, "theme.contrast_ratio(흰,검정) == 21.0")
-check(theme.readable_on(QColor("#ffe66d"), QColor("#ffffff")).name() == "#1f2937", "readable_on 흰 바탕 위 노랑 보정")
-check(theme.readable_on(QColor("#1b2a49"), QColor("#ffffff")).name() == "#1b2a49", "readable_on 흰 바탕 위 남색 유지")
+check(label_color(d_lbl, face_sample, fg_sample) == fg_sample, "모르는 아이콘 색 이름은 fg 유지")
+
+glass_list = ["blue", "orange", "yellow", "purple", "clear"]
+icon_list = ["yellow", "white", "blue", "pink"]
+all_combos_ok = True
+for g_tint in glass_list:
+    colors = theme.tint_colors(g_tint)
+    g_fg = colors[2] if colors else QColor(theme.T().text)
+    g_face = QColor((colors[0].red() + colors[1].red()) // 2,
+                    (colors[0].green() + colors[1].green()) // 2,
+                    (colors[0].blue() + colors[1].blue()) // 2) if colors else QColor(theme.T().base)
+    for ico in icon_list:
+        test_btn = DeckButtonData(id="combo_test", name="조합", icon_color=ico)
+        if label_color(test_btn, g_face, g_fg) != icon_color_for(test_btn, g_fg):
+            all_combos_ok = False
+            break
+    if not all_combos_ok:
+        break
+check(all_combos_ok, "유리색 5종 × 아이콘색 4종 모든 조합에서 글자색 == 아이콘색")
 
 # 10. 설정창 글꼴 드롭다운 및 미리보기 라벨 검사
 from ui.settings_dialog import SettingsDialog  # noqa: E402
@@ -1257,6 +1344,129 @@ try:
 finally:
     sdlg.close()
     theme.set_ui_font("")
+
+# 11. 정보 버튼 다중 표시 및 종류 파싱 테스트
+from core.system_info import parse_kinds, capacity, read_info  # noqa: E402
+from ui.deck_button import DeckButtonWidget  # noqa: E402
+
+check(parse_kinds("clock", 1) == ["clock"] and parse_kinds("clock,date,battery", 2) == ["clock", "date"],
+      "parse_kinds 기본 및 limit 동작")
+check(parse_kinds("foo,clock,clock", 4) == ["clock"] and parse_kinds("", 4) == ["clock"],
+      "parse_kinds 없는 종류 버림, 중복 제거, 빈 값 처리")
+check(capacity(1, 1) == 1 and capacity(2, 1) == 2 and capacity(1, 2) == 2 and capacity(2, 2) == 4,
+      "capacity 칸 수별 용량 (1칸->1, 2칸->2, 4칸->4)")
+
+val_sec, _, _ = read_info("clock_sec")
+val_12, _, _ = read_info("clock12")
+check(val_sec.count(":") == 2, f"read_info('clock_sec') 초 포함 시계 ({val_sec})")
+check(("오전" in val_12 or "오후" in val_12), f"read_info('clock12') 오전/오후 시계 ({val_12})")
+
+multi_info_btn = DeckButtonData(id="btn_multi_info", name="정보테스트", action_type="info",
+                                action_data="clock,date,battery,cpu", span_cols=2, span_rows=2)
+info_widget = DeckButtonWidget(multi_info_btn, 88, True, "line", parent=w)
+info_widget.set_span(2, 2)
+info_pixmap = info_widget.grab()
+check(not info_pixmap.isNull() and info_pixmap.width() > 0 and info_pixmap.height() > 0,
+      "2x2 정보 버튼(clock,date,battery,cpu) DeckButtonWidget grab 이미지 생성")
+info_widget.deleteLater()
+
+# 12. 예약(schedule) 버튼 관리자 및 동작 테스트
+from core.schedule_manager import parse_schedule, due_events, next_event, ScheduleManager  # noqa: E402
+from core.action_executor import ActionExecutor  # noqa: E402
+
+# due_events: 09:00 시작, now=09:00:30 -> ["start"], now=09:05 -> [] (90초 지남), now=08:59 -> []
+cfg_test = {"start": "09:00", "end": "", "days": [0, 1, 2, 3, 4, 5, 6]}
+base_mon = datetime(2026, 10, 26, 9, 0, 30)
+check(due_events(cfg_test, base_mon, {}) == ["start"], "due_events 09:00:30에 start 감지")
+check(due_events(cfg_test, datetime(2026, 10, 26, 9, 5, 0), {}) == [], "due_events 09:05:00에 90초 경과로 빈 목록")
+check(due_events(cfg_test, datetime(2026, 10, 26, 8, 59, 59), {}) == [], "due_events 08:59:59에 아직 시각 전으로 빈 목록")
+
+# 요일 제외: days=[1](화요일)인 경우 월요일에는 [], 화요일 09:00:10에는 ["start"]
+cfg_tue = {"start": "09:00", "end": "", "days": [1]}
+check(due_events(cfg_tue, datetime(2026, 10, 26, 9, 0, 10), {}) == [], "days=[1]인 경우 월요일에 빈 목록")
+check(due_events(cfg_tue, datetime(2026, 10, 27, 9, 0, 10), {}) == ["start"], "days=[1]인 경우 화요일 09:00:10에 start 감지")
+
+# last_fired 에 오늘 날짜가 있으면 [] (중복 실행 방지)
+check(due_events(cfg_test, base_mon, {"start": "2026-10-26"}) == [], "last_fired에 오늘 날짜 있으면 중복 실행 안 됨")
+
+# next_event: now=10:00 이고 start 09:00, end 18:00 → ("end", 오늘 18:00); now=19:00 → ("start", 내일 09:00)
+cfg_se = {"start": "09:00", "end": "18:00", "days": [0, 1, 2, 3, 4, 5, 6]}
+nxt_10 = next_event(cfg_se, datetime(2026, 10, 26, 10, 0, 0))
+check(nxt_10 is not None and nxt_10[0] == "end" and nxt_10[1] == datetime(2026, 10, 26, 18, 0, 0),
+      "next_event: 10:00일 때 오늘 18:00 종료 반환")
+nxt_19 = next_event(cfg_se, datetime(2026, 10, 26, 19, 0, 0))
+check(nxt_19 is not None and nxt_19[0] == "start" and nxt_19[1] == datetime(2026, 10, 27, 9, 0, 0),
+      "next_event: 19:00일 때 내일 09:00 시작 반환")
+
+# parse_schedule("깨진 글자") 가 기본값을 돌려주고 days 가 7개
+bad_cfg = parse_schedule("깨진 글자")
+check(bad_cfg.get("start") == "09:00" and len(bad_cfg.get("days", [])) == 7, "parse_schedule 깨진 글자 기본값 복원")
+
+# ScheduleManager.check 를 가짜 ActionExecutor(monkeypatch)로 실행해, 한 번만 호출되고 같은 분에 다시 check 해도 호출되지 않음
+sm = ScheduleManager()
+fake_btn = DeckButtonData(id="sched_btn", name="가짜예약", action_type="schedule",
+                          action_data='{"start":"09:00","start_type":"program","start_data":"dummy","days":[0,1,2,3,4,5,6]}')
+exec_calls = []
+orig_execute = ActionExecutor.execute
+ActionExecutor.execute = lambda t, d: (exec_calls.append((t, d)), (True, "가짜실행"))[1]
+try:
+    sm.check({"k1": fake_btn}, now=datetime(2026, 10, 26, 9, 0, 15))
+    check(len(exec_calls) == 1, "ScheduleManager.check 첫 번째 호출에서 1회 실행")
+    sm.check({"k1": fake_btn}, now=datetime(2026, 10, 26, 9, 0, 45))
+    check(len(exec_calls) == 1, "같은 날짜/시각 재검사 시 중복 실행되지 않음")
+finally:
+    ActionExecutor.execute = orig_execute
+
+# 예약 버튼을 DeckButtonWidget 으로 그려서(grab) 오류 없이 이미지가 나옴
+sched_widget_btn = DeckButtonData(id="btn_sched_render", name="출근예약", action_type="schedule",
+                                  action_data='{"start":"09:00","end":"18:00","days":[0,1,2,3,4,5,6]}',
+                                  span_cols=2, span_rows=1)
+sched_widget = DeckButtonWidget(sched_widget_btn, 88, True, "line", parent=w)
+sched_widget.set_span(2, 1)
+sched_pixmap = sched_widget.grab()
+check(not sched_pixmap.isNull() and sched_pixmap.width() > 0 and sched_pixmap.height() > 0,
+      "예약 버튼 DeckButtonWidget grab 이미지 생성")
+sched_widget.deleteLater()
+
+# 묶음 안의 예약 버튼 검사 및 예약 버튼이 없을 때 w._check_schedules() 검증
+orig_exec_for_chk = ActionExecutor.execute
+ActionExecutor.execute = lambda t, d: (True, "")
+try:
+    w._check_schedules()
+    check(True, "예약 버튼이 없을 때 w._check_schedules() 오류 없음")
+
+    grp_btn = DeckButtonData(id="btn_grp_test", name="묶음", action_type="group")
+    inner_sched = DeckButtonData(id="btn_inner_sched", name="묶음안예약", action_type="schedule",
+                                 action_data='{"start":"03:00","start_type":"program","days":[0,1,2,3,4,5,6]}')
+    grp_btn.children = {"btn_inner_sched": inner_sched}
+    cur_prof = w.current_profile
+    cur_prof.buttons["btn_grp_test"] = grp_btn
+    w._check_schedules()
+    check(True, "묶음 안에 schedule 버튼이 있을 때 w._check_schedules() 오류 없음")
+    del cur_prof.buttons["btn_grp_test"]
+finally:
+    ActionExecutor.execute = orig_exec_for_chk
+
+# 13. 단축키 창 표시 상태에 따른 토글(가려짐 감지) 테스트
+from core import win32  # noqa: E402
+check(win32.is_visible_on_top(0) is True, "win32.is_visible_on_top(0) == True")
+check(win32.bring_to_front(0, True) is False, "win32.bring_to_front(0, True) == False")
+
+orig_is_visible_on_top = win32.is_visible_on_top
+try:
+    w.show_deck()
+    win32.is_visible_on_top = lambda hwnd: True
+    w.toggle_visibility()
+    check(not w.isVisible(), "맨 앞일 때 toggle_visibility() -> 숨겨짐 (isVisible()==False)")
+    w.toggle_visibility()
+    check(w.isVisible(), "숨겨진 상태에서 toggle_visibility() -> 보임 (isVisible()==True)")
+
+    win32.is_visible_on_top = lambda hwnd: False
+    w.toggle_visibility()
+    check(w.isVisible(), "가려져 있을 때 toggle_visibility() -> 숨겨지지 않고 유지 (isVisible()==True)")
+finally:
+    win32.is_visible_on_top = orig_is_visible_on_top
+    w.show_deck()
 
 passed = sum(results)
 print(f"\n결과: {passed} / {len(results)} 통과")

@@ -8,10 +8,11 @@
 저장 형식(이전 버전과 동일): [{"type": "shortcut", "value": "Ctrl + S"}, ...]
 """
 
+from datetime import datetime, timedelta
 import json
 import threading
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 
@@ -22,10 +23,64 @@ STEP_TYPES = {
     "shortcut": "⌨️ 단축키",
     "text": "✏️ 글자 입력",
     "delay": "⏱ 잠시 기다리기",
+    "wait_until": "🕒 정해진 시각까지 기다리기",
     "media": "🔊 볼륨·미디어",
     "program": "🚀 프로그램 실행",
     "url": "🌐 웹사이트 열기",
 }
+
+
+def seconds_until(hhmm: str, now: Optional[datetime] = None) -> Optional[float]:
+    """HH:MM 형식의 시각까지 남은 초를 계산. 이미 지났으면 내일 같은 시각."""
+    if not isinstance(hhmm, str):
+        return None
+    parts = hhmm.strip().split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        h, m = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    if not (0 <= h < 24 and 0 <= m < 60):
+        return None
+    if now is None:
+        now = datetime.now()
+    target = now.replace(hour=h, minute=m, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return float((target - now).total_seconds())
+
+
+DELAY_UNITS = [
+    ("시간", 3_600_000),
+    ("분", 60_000),
+    ("초", 1_000),
+    ("밀리초", 1),
+]
+
+
+def ms_to_unit(ms: Any) -> Tuple[int, str]:
+    """밀리초를 나누어 떨어지는 가장 큰 단위와 값으로 변환합니다."""
+    try:
+        val = int(float(ms))
+    except (ValueError, TypeError):
+        return 0, "초"
+    if val <= 0:
+        return 0, "초"
+    for unit, factor in DELAY_UNITS:
+        if factor > 1 and val % factor == 0:
+            return val // factor, unit
+    return val, "밀리초"
+
+
+def unit_to_ms(val: Any, unit: str) -> int:
+    """값과 단위를 밀리초로 변환합니다."""
+    factors = {"시간": 3_600_000, "분": 60_000, "초": 1_000, "밀리초": 1}
+    factor = factors.get(unit, 1_000)
+    try:
+        return int(float(val) * factor)
+    except (ValueError, TypeError):
+        return 0
 
 
 def parse_steps(macro_json: str) -> List[Dict[str, str]]:
@@ -99,6 +154,17 @@ class MacroRunner(QObject):
                     while time.monotonic() < end and not cancel.is_set():
                         time.sleep(min(0.05, end - time.monotonic() + 0.001))
                     if cancel.is_set():   # 기다리는 도중에 멈춘 경우
+                        ok, msg = False, "매크로를 멈췄어요"
+                        break
+                    continue
+                if st == "wait_until":
+                    wait_sec = seconds_until(val)
+                    if wait_sec is None:
+                        continue
+                    end = time.monotonic() + wait_sec
+                    while time.monotonic() < end and not cancel.is_set():
+                        time.sleep(min(0.2, max(0.01, end - time.monotonic())))
+                    if cancel.is_set():
                         ok, msg = False, "매크로를 멈췄어요"
                         break
                     continue
