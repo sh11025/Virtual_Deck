@@ -72,17 +72,6 @@ def get_mute(kind: str = "speaker") -> Optional[bool]:
         return None
 
 
-def set_mute(kind: str, mute: bool) -> bool:
-    ev = _endpoint(kind)
-    if ev is None:
-        return False
-    try:
-        ev.SetMute(1 if mute else 0, None)
-        return True
-    except Exception:
-        _cache.pop(kind, None)
-        return False
-
 
 def toggle_mic_mute(from_worker: bool = False):
     """

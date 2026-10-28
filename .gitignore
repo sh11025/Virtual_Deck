@@ -19,3 +19,5 @@ data/crash.log*
 
 # 기타 보관용 폴더
 _backup_원본/
+_to_delete/
+*_result.txt

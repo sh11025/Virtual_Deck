@@ -8,7 +8,7 @@
 - 우클릭 메뉴(편집, 복사, 붙여넣기, 비우기, 되돌리기)
 - 실행 결과 알림, 버튼 반짝임/흔들림
 - 화면 가장자리에 자석처럼 붙기, 안 쓸 때 흐려지기
-- 전역 단축키로 숨기기/보이기, 시스템 트레이
+- 시스템 트레이
 - 버튼 묶음(폴더 버튼), 켜기/끄기 버튼, 매크로 진행 표시와 멈추기
 """
 
@@ -28,7 +28,7 @@ from core.action_executor import ActionExecutor
 from core.app_detector import AppDetector
 from core.macro_manager import MacroRunner
 from core.shortcut_manager import ShortcutManager
-from core.system_integration import GlobalHotkey, set_autostart, is_autostart_enabled
+from core.system_integration import set_autostart, is_autostart_enabled
 from models.button_model import DeckButtonData
 from models.config_model import AppConfig
 from models.profile_model import DeckProfile
@@ -224,9 +224,6 @@ class MainWindow(QWidget):
         self._init_tray()
         self.toast = Toast(self)
 
-        self.hotkey = GlobalHotkey(self)
-        self.hotkey.activated.connect(self.toggle_visibility)
-
         from core.timer_manager import TimerManager
         self.timers = TimerManager(self)
         self.timers.finished.connect(self._on_timer_finished)
@@ -295,7 +292,6 @@ class MainWindow(QWidget):
         if self.config.always_on_top:
             win32.keep_topmost(hwnd, True)
         self._apply_background_mode()
-        self._apply_hotkey()
         if not self._native_ready:
             QTimer.singleShot(1500, self._check_pycaw)
         self._native_ready = True
@@ -354,14 +350,6 @@ class MainWindow(QWidget):
             self._capture_timer.stop()
         self.panel.rebuild_background()
         self.update()
-
-    def _apply_hotkey(self):
-        if self.config.hotkey_enabled and self.config.hotkey:
-            ok = self.hotkey.register(int(self.winId()), self.config.hotkey)
-            if not ok and win32.IS_WINDOWS:
-                self.show_toast(f"단축키 {self.config.hotkey} 를 다른 프로그램이 쓰고 있어요.", "error")
-        else:
-            self.hotkey.unregister()
 
     # ================================================================ 화면 구성
     def _build_ui(self):
@@ -1282,7 +1270,6 @@ class MainWindow(QWidget):
             if new.auto_start != is_autostart_enabled():
                 if not set_autostart(new.auto_start) and win32.IS_WINDOWS:
                     self.show_toast("자동 실행 설정을 바꾸지 못했어요", "error")
-            self._apply_hotkey()
             self.save()
             if getattr(dlg, "restore_path", None):
                 self.restore_backup(dlg.restore_path)
@@ -1317,7 +1304,6 @@ class MainWindow(QWidget):
         self.undo_stack.clear()
         self.apply_config(cfg)
         self._rebuild_grid()
-        self._apply_hotkey()
         self.save()
         self.show_toast("백업으로 되돌렸어요", "ok")
 
@@ -1611,15 +1597,13 @@ class MainWindow(QWidget):
         self.hide()
         self.grabber.pause(True)
         if not self.config.tray_hint_shown:
-            hk = f" ({self.config.hotkey})" if self.config.hotkey_enabled else ""
-            self.tray.showMessage("Virtual Deck", f"트레이에 숨었어요. 아이콘을 누르거나 단축키{hk}로 다시 열 수 있어요.",
+            self.tray.showMessage("Virtual Deck", "트레이에 숨었어요. 아이콘을 누르면 다시 열 수 있어요.",
                                   QSystemTrayIcon.Information, 3000)
             self.config.tray_hint_shown = True
             self.save()
 
     def quit_app(self):
         MacroRunner.instance().stop_all()
-        self.hotkey.unregister()
         self.config.window_x, self.config.window_y = self.x(), self.y()
         self.save()
         self.tray.hide()

@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, Signal, QRectF, QTimer, QTime
 from PySide6.QtGui import QPainter, QColor, QFont, QKeyEvent
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QLineEdit, QWidget,
-    QStackedWidget, QFileDialog, QLabel, QTimeEdit, QSpinBox, QAbstractSpinBox,
+    QStackedWidget, QFileDialog, QLabel, QTimeEdit, QSpinBox,
 )
 
 from core.macro_manager import STEP_TYPES, parse_steps, ms_to_unit, unit_to_ms
@@ -252,7 +252,6 @@ class MacroEditorDialog(GlassDialog):
         self.time_edit = no_wheel(QTimeEdit())
         self.time_edit.setDisplayFormat("HH:mm")
         self.time_edit.setTime(QTime.currentTime())
-        self.time_edit.setButtonSymbols(QAbstractSpinBox.NoButtons)
         self.time_edit.setAlignment(Qt.AlignCenter)
         self.time_edit.setFixedWidth(110)
         wl.addWidget(self.time_edit, 0, Qt.AlignLeft)

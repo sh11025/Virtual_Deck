@@ -21,6 +21,7 @@ ACTION_LABELS = {
     "folder": "폴더 열기",
     "shortcut": "단축키",
     "media": "볼륨 · 미디어",
+    "volume": "볼륨 정확히 맞추기 (○%)",
     "macro": "연속 동작",
     "group": "버튼 묶음",
     "info": "정보 보여 주기 (시계·볼륨 등)",
@@ -33,12 +34,20 @@ ACTION_LABELS = {
 
 ACTION_ICONS = {
     "url": "🌐", "program": "🚀", "file": "📄", "folder": "📁",
-    "shortcut": "⌨️", "media": "🔊", "macro": "⚡", "group": "🗂️", "info": "🕒", "timer": "⏱️",
+    "shortcut": "⌨️", "media": "🔊", "volume": "🎚️", "macro": "⚡", "group": "🗂️", "info": "🕒", "timer": "⏱️",
     "schedule": "📅",
     "profile": "👤",
     "back": "⬅️",
     "close": "✖️",
 }
+
+
+def _volume_percent(data) -> int:
+    """볼륨 동작의 값(0~100)을 안전하게 읽습니다. 이상한 값이면 50."""
+    try:
+        return max(0, min(100, int(str(data).strip().rstrip("%"))))
+    except (ValueError, TypeError):
+        return 50
 
 
 def describe_action(action_type: str, action_data: str) -> str:
@@ -48,6 +57,8 @@ def describe_action(action_type: str, action_data: str) -> str:
         return "묶음에서 나가기"
     if action_type == "profile":
         return "프로필 이동"
+    if action_type == "volume":
+        return f"볼륨 {_volume_percent(action_data)}%로 맞추기"
     if action_type == "media":
         return ShortcutManager.media_label(action_data)
     if action_type == "macro":
@@ -102,6 +113,9 @@ class ActionExecutor:
                 return ActionExecutor._run_program(data)
             if action_type in ("file", "folder"):
                 return ActionExecutor._open_path(data, action_type)
+            if action_type == "volume":
+                from core.audio_state import set_master_volume
+                return set_master_volume(_volume_percent(data))
             if action_type == "media" and data == "MicMute":
                 from core.audio_state import toggle_mic_mute
                 return toggle_mic_mute()

@@ -12,6 +12,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QPainter, QColor, QFont, QPixmap, QKeyEvent, QMouseEvent, QIcon, QPen, QRadialGradient,
+    QFontMetrics,
 )
 from PySide6.QtWidgets import (
     QAbstractButton, QPushButton, QWidget, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
@@ -410,6 +411,15 @@ def pick_color(parent, initial, title="색 고르기"):
     dlg.setWindowTitle(title)
     dlg.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
     dlg.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+    t = T()
+    # 어두운 테마에서도 글자가 보이도록 배경과 버튼을 테마 색으로 직접 지정
+    dlg.setStyleSheet(
+        f"QColorDialog {{ background: {t.popup_bg}; }}"
+        f"QColorDialog QLabel {{ color: {t.text}; background: transparent; }}"
+        f"QColorDialog QPushButton {{ background: {t.input_bg}; color: {t.text};"
+        f" border: 1px solid {t.input_border}; border-radius: 10px; padding: 6px 16px; }}"
+        f"QColorDialog QPushButton:hover {{ border: 1px solid {t.accent}; }}"
+    )
     owner = parent
     while owner is not None and not hasattr(owner, "_menu_open"):
         owner = owner.parent() if hasattr(owner, "parent") else None
@@ -532,16 +542,25 @@ class ColorChips(QWidget):
                 return i
         return -1
 
+    def _dirty(self, i):
+        """칩 하나가 있던 자리만 다시 그리기 위한 영역"""
+        if i < 0 or i >= len(self.keys):
+            return
+        self.update(self._rect(i).adjusted(-6, -6, 6, 6).toAlignedRect())
+
     def mouseMoveEvent(self, e):
         i = self._index_at(e.position())
         if i != self._hover:
+            old = self._hover
             self._hover = i
             self.setToolTip(self._tip(self.keys[i]) if i >= 0 else "")
-            self.update()
+            self._dirty(old)
+            self._dirty(i)
 
     def leaveEvent(self, e):
+        old = self._hover
         self._hover = -1
-        self.update()
+        self._dirty(old)
 
     def mousePressEvent(self, e):
         i = self._index_at(e.position())
@@ -567,11 +586,14 @@ class ColorChips(QWidget):
         if chosen is act:
             self.remove_custom(key)
 
-    def paintEvent(self, _):
+    def paintEvent(self, ev):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
+        clip = QRectF(ev.rect())
         for i, key in enumerate(self.keys):
             r = self._rect(i)
+            if not r.adjusted(-6, -6, 6, 6).intersects(clip):
+                continue    # 바뀐 곳만 다시 그림 (렉 줄이기)
             sel = (key != self.ADD_KEY and key == self.current)
             if sel:  # 고른 칩은 톡 튀어나오는 효과
                 k = (1 - self._pop.value) * 0.18
@@ -976,6 +998,88 @@ class ModifierChip(QAbstractButton):
             p.setPen(QColor(T().text_dim))
         p.setFont(self.font())
         p.drawText(r, Qt.AlignCenter, self.text())
+
+
+class GlassCheck(QAbstractButton):
+    """
+    체크박스 대신 쓰는 유리 버튼
+    - 기본: "이름 ........ [작은 스위치]" 한 줄 (클릭하면 스위치가 미끄러지며 켜짐/꺼짐)
+    - chip=True: 요일처럼 짧은 항목용 알약 (켜면 파란 유리 + 흰 글자)
+    """
+
+    def __init__(self, text: str = "", parent=None, chip: bool = False):
+        super().__init__(parent)
+        self.setText(text)
+        self._chip = chip
+        self.setCheckable(True)
+        self.setCursor(Qt.PointingHandCursor)
+        self._hover = _Anim(self)
+        self._pos = _Anim(self, 260)
+        self._pos.value = 0.0
+        self.toggled.connect(self._on_toggled)
+        self.setFont(theme.dialog_font(13, QFont.Bold))
+        self.setMinimumHeight(40 if not chip else 38)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+
+    def _on_toggled(self, on):
+        self._pos.to(1.0 if on else 0.0, 280, QEasingCurve.OutBack)
+        self.update()
+
+    def setChecked(self, on: bool):
+        super().setChecked(on)
+        self._pos.value = 1.0 if on else 0.0
+        self.update()
+
+    def sizeHint(self):
+        w = QFontMetrics(self.font()).horizontalAdvance(self.text())
+        if self._chip:
+            return QSize(max(60, w + 36), 38)
+        return QSize(w + 28 + 14 + 44 + 12, 40)
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def enterEvent(self, e):
+        self._hover.to(1.0)
+
+    def leaveEvent(self, e):
+        self._hover.to(0.0)
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.45)
+        r = QRectF(2, 2, self.width() - 4, self.height() - 6)
+        p.setFont(self.font())
+        if self._chip:
+            if self.isChecked():
+                paint_glass(p, r, 12, tint="blue", hover=self._hover.value, shadow_strength=0.6, rainbow=0.5)
+                p.setPen(QColor("#ffffff"))
+            else:
+                paint_slot(p, r, 12, self._hover.value)
+                p.setPen(QColor(T().text_dim))
+            p.drawText(r, Qt.AlignCenter, self.text())
+            return
+        # 줄 모양: 움푹한 홈 위에 이름, 오른쪽 끝에 작은 스위치
+        paint_slot(p, r, 12, self._hover.value)
+        p.setPen(QColor(T().text if self.isChecked() else T().text_dim))
+        p.drawText(QRectF(r.left() + 14, r.top(), r.width() - 80, r.height()),
+                   Qt.AlignVCenter | Qt.AlignLeft, self.text())
+        tw, th = 40.0, 20.0
+        track = QRectF(r.right() - tw - 10, r.center().y() - th / 2, tw, th)
+        v = self._pos.value
+        vc = max(0.0, min(1.0, v))
+        paint_slot(p, track, th / 2, self._hover.value)
+        if vc > 0.01:
+            p.save()
+            p.setOpacity(p.opacity() * min(1.0, vc * 2.5))
+            paint_glass(p, track, th / 2, tint="mint", shadow=False, rainbow=0.4, highlight=0.8)
+            p.restore()
+        d = th - 4
+        x = track.left() + 2 + (tw - d - 4) * v
+        paint_glass(p, QRectF(x, track.top() + 2, d, d), d / 2, fill=0.92, shadow_strength=0.7,
+                    hover=self._hover.value, rainbow=0.5)
 
 
 class ShortcutEditor(QWidget):

@@ -34,11 +34,11 @@ def main():
     from ui import theme
 
     try:
-        from core.version import VERSION as app_version
+        from core.version import APP_VERSION as app_version
     except Exception:
         try:
             from core import version as _ver_mod
-            app_version = getattr(_ver_mod, "VERSION", getattr(_ver_mod, "__version__", "1.0.0"))
+            app_version = getattr(_ver_mod, "APP_VERSION", "1.0.0")
         except Exception:
             app_version = "1.0.0"
 
@@ -112,7 +112,7 @@ def main():
         from ui.widgets import inform
         theme.load_fonts()
         app.setStyleSheet(theme.get_qss())
-        inform(None, "이미 실행 중이에요", "Virtual Deck 이 이미 켜져 있어요.\n트레이 아이콘이나 단축키로 열어 주세요.")
+        inform(None, "이미 실행 중이에요", "Virtual Deck 이 이미 켜져 있어요.\n트레이 아이콘을 눌러 열어 주세요.")
         return 0
 
     if crash_file:

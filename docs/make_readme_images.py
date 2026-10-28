@@ -28,9 +28,7 @@ from ui import theme
 theme.load_fonts()
 
 import core.action_executor as AE
-import core.system_integration as SI
 AE.ActionExecutor.execute = staticmethod(lambda t, d: (True, "ok"))
-SI.GlobalHotkey.register = lambda self, hwnd, sc: False
 
 from models.button_model import DeckButtonData
 from models.config_model import AppConfig

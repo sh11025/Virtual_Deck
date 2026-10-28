@@ -1045,7 +1045,7 @@ EMOJI_TO_ICON.update({
 # 동작별 기본 아이콘
 ACTION_DEFAULT_ICONS = {
     "url": "globe", "program": "rocket", "file": "file", "folder": "folder", "shortcut": "keyboard",
-    "media": "volume_up", "macro": "bolt", "group": "grid", "info": "clock", "timer": "timer",
+    "media": "volume_up", "volume": "volume_up", "macro": "bolt", "group": "grid", "info": "clock", "timer": "timer",
     "profile": "user",
     "back": "arrow_left",
 }

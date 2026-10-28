@@ -21,7 +21,7 @@ from ui import theme
 from ui.theme import T
 from ui.glass import paint_glass, rounded_path, make_aurora, with_alpha
 from ui.widgets import (
-    GlassDialog, GlassButton, GlassToggle, SegmentedTabs, KeyCaptureEdit, section_label, hint_label,
+    GlassDialog, GlassButton, GlassToggle, SegmentedTabs, section_label, hint_label,
     no_wheel, make_spin, pick_color,
 )
 
@@ -37,10 +37,6 @@ class ColorSwatch(QAbstractButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setFixedSize(64, 38)
         self.clicked.connect(self._pick)
-
-    def set_color(self, c: str):
-        self.color = c
-        self.update()
 
     def _pick(self):
         c = pick_color(self.window(), self.color, "색 고르기")
@@ -485,26 +481,13 @@ class SettingsDialog(GlassDialog):
         cols = QHBoxLayout()
         cols.setSpacing(20)
 
-        # 왼쪽: 항상 위, 숨기기 키, 자석, 흐려지기, 위쪽 메뉴 항상 보이기
+        # 왼쪽: 항상 위, 자석, 흐려지기, 위쪽 메뉴 항상 보이기
         left = QVBoxLayout()
         left.setSpacing(10)
 
         self.top_toggle = GlassToggle(c.always_on_top)
         self.top_toggle.toggled.connect(lambda on: self._set("always_on_top", on))
         left.addLayout(toggle_row("항상 맨 위에", "다른 창 위에 계속 떠 있어요", self.top_toggle))
-
-        self.hotkey_toggle = GlassToggle(c.hotkey_enabled)
-        self.hotkey_toggle.toggled.connect(self._on_hotkey_toggle)
-        left.addLayout(toggle_row("단축키로 보이기/숨기기", "어디서든 누르면 나타나거나 사라져요", self.hotkey_toggle))
-
-        hk_row = QHBoxLayout()
-        hk_row.setSpacing(10)
-        hk_row.addWidget(QLabel("단축키"))
-        self.hotkey_edit = KeyCaptureEdit(c.hotkey)
-        self.hotkey_edit.captured.connect(self._on_hotkey_captured)
-        self.hotkey_edit.setEnabled(c.hotkey_enabled)
-        hk_row.addWidget(self.hotkey_edit, 1)
-        left.addLayout(hk_row)
 
         self.snap_toggle = GlassToggle(c.snap_edges)
         self.snap_toggle.toggled.connect(lambda on: self._set("snap_edges", on))
@@ -916,21 +899,6 @@ class SettingsDialog(GlassDialog):
 
     def _set(self, key, value):
         setattr(self.config, key, value)
-        self._changed()
-
-    def _on_hotkey_toggle(self, on):
-        self.config.hotkey_enabled = on
-        self.hotkey_edit.setEnabled(on)
-        self._changed()
-
-    def _on_hotkey_captured(self, key, mods):
-        if not mods:
-            self.hotkey_edit.setText("Ctrl·Alt와 함께 누르세요")
-            return
-        order = [m for m in ("Win", "Ctrl", "Alt", "Shift") if m in mods]
-        value = " + ".join(order + [key])
-        self.hotkey_edit.setText(value)
-        self.config.hotkey = value
         self._changed()
 
     def _on_fade_toggle(self, on):

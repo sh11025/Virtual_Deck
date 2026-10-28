@@ -12,8 +12,7 @@ from PySide6.QtCore import Qt, Signal, QRectF, QTime
 from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QStackedWidget,
-    QFileDialog, QScrollArea, QFrame, QSizePolicy, QCheckBox, QGridLayout, QTimeEdit,
-    QAbstractSpinBox,
+    QFileDialog, QScrollArea, QFrame, QSizePolicy, QGridLayout, QTimeEdit,
 )
 
 from core import paths
@@ -28,7 +27,7 @@ from ui.theme import T
 from ui.deck_button import DeckButtonWidget
 from ui.glass import paint_glass
 from ui.widgets import (
-    GlassDialog, GlassButton, GlassToggle, ColorChips, ShortcutEditor, SegmentedTabs,
+    GlassDialog, GlassButton, GlassToggle, GlassCheck, ColorChips, ShortcutEditor, SegmentedTabs,
     section_label, hint_label, inform, no_wheel, make_spin,
 )
 
@@ -77,15 +76,22 @@ class EmojiGrid(QWidget):
                 return i
         return -1
 
+    def _dirty(self, i):
+        if 0 <= i < len(self.ICONS):
+            self.update(self._rect(i).adjusted(-6, -6, 6, 6).toAlignedRect())
+
     def mouseMoveEvent(self, e):
         i = self._index(e.position())
         if i != self._hover:
+            old = self._hover
             self._hover = i
-            self.update()
+            self._dirty(old)
+            self._dirty(i)
 
     def leaveEvent(self, e):
+        old = self._hover
         self._hover = -1
-        self.update()
+        self._dirty(old)
 
     def mousePressEvent(self, e):
         i = self._index(e.position())
@@ -94,12 +100,15 @@ class EmojiGrid(QWidget):
             self.picked.emit(self.current)
             self.update()
 
-    def paintEvent(self, _):
+    def paintEvent(self, ev):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setFont(theme.emoji_font(18))
+        clip = QRectF(ev.rect())
         for i, ic in enumerate(self.ICONS):
             r = self._rect(i)
+            if not r.adjusted(-6, -6, 6, 6).intersects(clip):
+                continue
             if ic == self.current:
                 paint_glass(p, r, 10, tint="blue", shadow_strength=0.5, rainbow=0.4)
             elif i == self._hover:
@@ -236,7 +245,7 @@ class ActionEditor(QWidget):
             w.checkboxes = {}
 
             # 시계 체크박스
-            cb_clock = QCheckBox("시계")
+            cb_clock = GlassCheck("시계")
             cb_clock.toggled.connect(lambda *_: self._on_info_toggled())
             w.checkboxes["clock"] = cb_clock
             grid.addWidget(cb_clock, 0, 0)
@@ -246,8 +255,8 @@ class ActionEditor(QWidget):
             cs_lay = QVBoxLayout(clock_sub)
             cs_lay.setContentsMargins(18, 0, 0, 0)
             cs_lay.setSpacing(2)
-            w.cb_ampm = QCheckBox("오전/오후로 보기")
-            w.cb_sec = QCheckBox("초까지 보기")
+            w.cb_ampm = GlassCheck("오전/오후로 보기")
+            w.cb_sec = GlassCheck("초까지 보기")
             for scb in (w.cb_ampm, w.cb_sec):
                 scb.toggled.connect(lambda *_: self.changed.emit())
                 cs_lay.addWidget(scb)
@@ -267,7 +276,7 @@ class ActionEditor(QWidget):
             coords = [(0, 1), (1, 1), (2, 0), (2, 1), (3, 0)]
             for (r, c), key in zip(coords, remaining):
                 label, _icon = INFO_KINDS[key]
-                cb = QCheckBox(label)
+                cb = GlassCheck(label)
                 cb.toggled.connect(lambda *_: self._on_info_toggled())
                 w.checkboxes[key] = cb
                 grid.addWidget(cb, r, c)
@@ -283,6 +292,20 @@ class ActionEditor(QWidget):
             v.setContentsMargins(0, 0, 0, 0)
             v.addWidget(hint_label("누르면 안에 버튼이 더 있어요. 저장한 뒤 버튼을 눌러 "
                                    "안쪽 칸을 채우세요. 위쪽 ‹ 버튼으로 다시 나올 수 있어요."))
+            return w
+        if t == "volume":
+            w = QWidget()
+            v = QVBoxLayout(w)
+            v.setContentsMargins(0, 0, 0, 0)
+            row = QHBoxLayout()
+            row.addWidget(QLabel("소리 크기"))
+            spin = make_spin(0, 100, 50, suffix=" %")
+            spin.valueChanged.connect(lambda _: self.changed.emit())
+            row.addWidget(spin)
+            row.addStretch(1)
+            v.addLayout(row)
+            v.addWidget(hint_label("누르면 컴퓨터 소리를 정확히 이 크기로 맞춰요. (0은 소리 끔, 100은 최대)"))
+            w.spin = spin
             return w
         if t == "profile":
             w = QWidget()
@@ -317,11 +340,10 @@ class ActionEditor(QWidget):
         v.setSpacing(4)
 
         # 1. 시작 설정: [☑ 시작] [시각] [종류 콤보] 한 줄, 그 아래 [내용 입력칸] 한 줄
-        w.start_enable = QCheckBox("시작")
+        w.start_enable = GlassCheck("시작")
         w.start_time = QTimeEdit()
         w.start_time.setDisplayFormat("HH:mm")
         w.start_time.setTime(QTime(9, 0))
-        w.start_time.setButtonSymbols(QAbstractSpinBox.NoButtons)
         w.start_time.setAlignment(Qt.AlignCenter)
         w.start_time.setFixedWidth(92)
         w.start_type = no_wheel(QComboBox())
@@ -341,11 +363,10 @@ class ActionEditor(QWidget):
         v.addWidget(w.start_data)
 
         # 2. 종료 설정: [☑ 종료] [시각] [종류 콤보] 한 줄, 그 아래 [내용 입력칸] 한 줄
-        w.end_enable = QCheckBox("종료")
+        w.end_enable = GlassCheck("종료")
         w.end_time = QTimeEdit()
         w.end_time.setDisplayFormat("HH:mm")
         w.end_time.setTime(QTime(18, 0))
-        w.end_time.setButtonSymbols(QAbstractSpinBox.NoButtons)
         w.end_time.setAlignment(Qt.AlignCenter)
         w.end_time.setFixedWidth(92)
         w.end_type = no_wheel(QComboBox())
@@ -369,7 +390,7 @@ class ActionEditor(QWidget):
         row_days.setSpacing(4)
         w.day_cbs = []
         for name in ("월", "화", "수", "목", "금", "토", "일"):
-            cb = QCheckBox(name)
+            cb = GlassCheck(name, chip=True)
             cb.setChecked(True)
             cb.toggled.connect(lambda *_: self.changed.emit())
             w.day_cbs.append(cb)
@@ -582,6 +603,8 @@ class ActionEditor(QWidget):
                 elif page.checkboxes.get(k) and page.checkboxes[k].isChecked():
                     selected.append(k)
             return t, ",".join(selected) if selected else "clock"
+        if t == "volume":
+            return t, str(page.spin.value())
         if t == "profile":
             return t, page.combo.currentData() or ""
         if t == "back":
@@ -660,6 +683,11 @@ class ActionEditor(QWidget):
             if hasattr(page, "_sync_clock_sub"):
                 page._sync_clock_sub()
             self._update_info_hint()
+        elif t == "volume":
+            try:
+                page.spin.setValue(max(0, min(100, int(str(data).strip().rstrip("%")))))
+            except ValueError:
+                page.spin.setValue(50)
         elif t == "profile":
             i = page.combo.findData(data)
             if i >= 0:
@@ -761,11 +789,8 @@ class ThemeIconGrid(QWidget):
                 r, c = divmod(i, self.cols)
                 self.items.append((n, QRectF(2 + c * self.cell + 2, y + r * self.cell + 2, self.cell - 4, self.cell - 4)))
             y += ((len(names) + self.cols - 1) // self.cols) * self.cell + 6
+        self._rects = dict(self.items)
         self.setFixedHeight(y)
-
-    def set_style(self, style: str):
-        self.style = style
-        self.update()
 
     def set_current(self, icon: str):
         self.current = icons.icon_name(icon)
@@ -777,16 +802,24 @@ class ThemeIconGrid(QWidget):
                 return n
         return None
 
+    def _dirty(self, name):
+        r = self._rects.get(name) if name else None
+        if r is not None:
+            self.update(r.adjusted(-6, -6, 6, 6).toAlignedRect())
+
     def mouseMoveEvent(self, e):
         n = self._at(e.position())
         if n != self._hover:
+            old = self._hover
             self._hover = n
             self.setToolTip(icons.REGISTRY[n][0] if n else "")
-            self.update()
+            self._dirty(old)
+            self._dirty(n)
 
     def leaveEvent(self, e):
+        old = self._hover
         self._hover = None
-        self.update()
+        self._dirty(old)
 
     def mousePressEvent(self, e):
         n = self._at(e.position())
@@ -795,15 +828,19 @@ class ThemeIconGrid(QWidget):
             self.picked.emit(icons.PREFIX + n)
             self.update()
 
-    def paintEvent(self, _):
+    def paintEvent(self, ev):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setFont(theme.ui_font(11, QFont.DemiBold))
         p.setPen(QColor(T().text_dim))
+        clip = QRectF(ev.rect())
         for text, y in self.headers:
-            p.drawText(QRectF(4, y, self.width(), 20), Qt.AlignVCenter | Qt.AlignLeft, text)
+            if QRectF(4, y, self.width(), 20).intersects(clip):
+                p.drawText(QRectF(4, y, self.width(), 20), Qt.AlignVCenter | Qt.AlignLeft, text)
         color = QColor(T().text)
         for n, r in self.items:
+            if not r.adjusted(-6, -6, 6, 6).intersects(clip):
+                continue    # 바뀐 칸만 다시 그림 (렉 줄이기)
             sel = n == self.current
             if sel:
                 paint_glass(p, r, 10, tint="blue", shadow_strength=0.5, rainbow=0.4)
@@ -919,7 +956,7 @@ class IconPicker(QWidget):
 
 
 class ButtonEditorDialog(GlassDialog):
-    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "macro", "group", "profile", "back", "info", "timer", "schedule"]
+    PRIMARY_TYPES = ["url", "program", "file", "folder", "shortcut", "media", "volume", "macro", "group", "profile", "back", "info", "timer", "schedule"]
     SPANS = [(1, 1), (2, 1), (1, 2), (2, 2)]
     OFF_TYPES = ["none", "close", "url", "program", "file", "folder", "shortcut", "media", "macro", "profile"]
 
@@ -1359,6 +1396,8 @@ class ButtonEditorDialog(GlassDialog):
             return data.replace(" + ", "+")[:14]
         if t == "media":
             return ShortcutManager.media_label(data).split(" ", 1)[-1][:10]
+        if t == "volume":
+            return f"볼륨 {data}%"
         if t == "macro":
             return "연속 동작"
         if t == "group":

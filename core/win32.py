@@ -54,8 +54,6 @@ if IS_WINDOWS:
     user32.SetWindowDisplayAffinity.restype = wintypes.BOOL
     user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
     user32.MapVirtualKeyW.restype = wintypes.UINT
-    user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
-    user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
     user32.SetWindowPos.restype = wintypes.BOOL
 
@@ -243,20 +241,3 @@ def play_alert() -> None:
     except Exception:
         pass
 
-
-def register_hotkey(hwnd: int, hotkey_id: int, modifiers: int, vk: int) -> bool:
-    if not IS_WINDOWS:
-        return False
-    try:
-        return bool(user32.RegisterHotKey(hwnd, hotkey_id, modifiers | 0x4000, vk))  # 0x4000 = 꾹 눌러도 반복 안 함
-    except Exception:
-        return False
-
-
-def unregister_hotkey(hwnd: int, hotkey_id: int) -> None:
-    if not IS_WINDOWS:
-        return
-    try:
-        user32.UnregisterHotKey(hwnd, hotkey_id)
-    except Exception:
-        pass

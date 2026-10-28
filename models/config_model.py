@@ -68,8 +68,6 @@ class AppConfig:
     # 동작
     auto_switch_profile: bool = True
     always_show_header: bool = False  # 위쪽 메뉴 항상 보이기
-    hotkey_enabled: bool = True
-    hotkey: str = "Ctrl + Alt + D"
     auto_start: bool = False
     auto_fade: bool = False
     auto_fade_delay: int = 6        # 초

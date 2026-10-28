@@ -163,13 +163,6 @@ def contrast_ratio(c1: QColor, c2: QColor) -> float:
     return (hi + 0.05) / (lo + 0.05)
 
 
-def readable_on(color: QColor, background: QColor, min_ratio: float = 2.2) -> QColor:
-    """글자색이 바탕과 비슷해서 안 보이면 흰색/진한 색 중 대비가 큰 쪽으로 바꿉니다."""
-    if contrast_ratio(color, background) >= min_ratio:
-        return QColor(color)
-    white, dark = QColor("#ffffff"), QColor("#1f2937")
-    return white if contrast_ratio(white, background) >= contrast_ratio(dark, background) else dark
-
 
 _current = LIGHT
 
@@ -295,9 +288,6 @@ def set_ui_scale(key_or_val):
         UI_SCALE = float(key_or_val)
     else:
         UI_SCALE = 1.0
-
-def ui_scale() -> float:
-    return UI_SCALE
 
 def dialog_font(size: float = 13, weight=QFont.Medium) -> QFont:
     scaled_size = round(size * UI_SCALE)

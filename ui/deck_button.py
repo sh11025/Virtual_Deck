@@ -191,12 +191,6 @@ class DeckButtonWidget(QWidget):
         self._refresh_tooltip()
         self.update()
 
-    def set_button_size(self, size: int, show_labels: bool = None) -> None:
-        self.button_size = size
-        if show_labels is not None:
-            self.show_labels = show_labels
-        self.set_span(*self.span, spacing=self.spacing)
-
     def set_span(self, cols: int, rows: int, spacing: int = None) -> None:
         """큰 버튼: 가로/세로로 칸을 합쳐서 차지합니다."""
         if spacing is not None:
@@ -461,9 +455,9 @@ class DeckButtonWidget(QWidget):
         wide = rect.width() > rect.height() * 1.4
         lum = (0.299 * fg.red() + 0.587 * fg.green() + 0.114 * fg.blue()) / 255
         if clear:
-            halo = QColor(0, 0, 0, 130) if lum > 0.5 else QColor(255, 255, 255, 220)
+            halo = QColor(0, 0, 0, 80) if lum > 0.5 else QColor(255, 255, 255, 70)
         else:
-            halo = QColor(0, 0, 0, 110) if lum > 0.5 else QColor(255, 255, 255, 150)
+            halo = QColor(0, 0, 0, 70) if lum > 0.5 else QColor(255, 255, 255, 60)
 
 
         if d.action_type == "info":
@@ -515,8 +509,7 @@ class DeckButtonWidget(QWidget):
                 text = fm.elidedText(d.name.strip(), Qt.ElideRight, int(text_rect.width()))
                 # 투명한 유리 위에서도 글자가 잘 보이도록 은은한 빛을 둘러 줍니다.
                 p.setPen(halo)
-                for dx, dy in ((0, 1), (1, 0), (-1, 0), (0, -1)):
-                    p.drawText(text_rect.translated(dx * 0.8, dy * 0.8), align, text)
+                p.drawText(text_rect.translated(0, 1), align, text)
                 p.setPen(fg)
                 p.drawText(text_rect, align, text)
 

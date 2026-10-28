@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QHBoxLayout, QVBoxLayout, QListWidget, QListWidgetItem, QLineEdit, QComboBox,
-    QFileDialog, QGridLayout, QCheckBox, QLabel,
+    QFileDialog, QGridLayout, QLabel,
 )
 
 from core.app_detector import AppDetector
@@ -19,7 +19,7 @@ from models.profile_model import DeckProfile
 from services.sample_profiles import SAMPLES, create_sample_profile
 from ui import theme
 from ui.theme import T
-from ui.widgets import GlassDialog, GlassButton, section_label, hint_label, ask, inform
+from ui.widgets import GlassDialog, GlassButton, GlassCheck, section_label, hint_label, ask, inform
 
 AUTO_HINTS = {
     "Hwp.exe": "한글을 쓸 때 자동으로 바뀌어요",
@@ -49,7 +49,7 @@ class SampleProfilesDialog(GlassDialog):
             cv.setContentsMargins(6, 4, 6, 4)
             cv.setSpacing(2)
 
-            cb = QCheckBox(item["name"])
+            cb = GlassCheck(item["name"])
             cb.setFont(theme.ui_font(13, QFont.Bold))
             cb.setCursor(Qt.PointingHandCursor)
             cv.addWidget(cb)

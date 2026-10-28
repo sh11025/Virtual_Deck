@@ -32,7 +32,6 @@ from ui import theme, icons  # noqa: E402
 theme.load_fonts()
 
 import core.action_executor as AE  # noqa: E402
-import core.system_integration as SI  # noqa: E402
 from core import paths  # noqa: E402
 from core.shortcut_manager import ShortcutManager as SM  # noqa: E402
 from models.button_model import DeckButtonData as B  # noqa: E402
@@ -44,7 +43,6 @@ from services.storage_service import StorageService  # noqa: E402
 executed = []
 REAL_EXECUTE = AE.ActionExecutor.execute
 AE.ActionExecutor.execute = staticmethod(lambda t, d: (executed.append((t, d)) or (True, "ok")))
-SI.GlobalHotkey.register = lambda self, hwnd, sc: False
 import core.app_finder as AF  # noqa: E402
 AF.list_start_apps = lambda force=False: [
     ("Claude", "Anthropic.Claude_xxx"),
@@ -1557,7 +1555,6 @@ finally:
 
 passed = sum(results)
 print(f"\n결과: {passed} / {len(results)} 통과")
-w.hotkey.unregister()
 import shutil  # noqa: E402
 shutil.rmtree(TMP, ignore_errors=True)   # 테스트용 임시 폴더도 남기지 않음
 sys.exit(0 if passed == len(results) else 1)
