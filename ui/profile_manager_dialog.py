@@ -36,7 +36,7 @@ class SampleProfilesDialog(GlassDialog):
     """프로필 예시 모음 창"""
 
     def __init__(self, manager: "ProfileManagerDialog", parent=None):
-        super().__init__("예시 모음", "필요한 작업 환경을 골라 추가해 보세요", parent=parent, width=560, modeless=False)
+        super().__init__("템플릿", "필요한 작업 환경을 골라 추가해 보세요", parent=parent, width=560, modeless=False)
         self.manager = manager
         self.checkboxes = []
 
@@ -167,9 +167,9 @@ class ProfileManagerDialog(GlassDialog):
         left.addWidget(self.list, 1)
         lb = QHBoxLayout()
         lb.setSpacing(6)
-        add = GlassButton("새로", tint="blue", icon_name="plus")
+        add = GlassButton("추가", tint="blue", icon_name="plus")
         add.clicked.connect(self._add)
-        samples_btn = GlassButton("예시 모음…", icon_name="grid")
+        samples_btn = GlassButton("템플릿", icon_name="grid")
         samples_btn.clicked.connect(self._open_samples)
         dup = GlassButton("복제", icon_name="duplicate")
         dup.clicked.connect(self._duplicate)

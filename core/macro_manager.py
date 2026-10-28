@@ -24,6 +24,7 @@ STEP_TYPES = {
     "text": "✏️ 글자 입력",
     "delay": "⏱ 잠시 기다리기",
     "wait_until": "🕒 정해진 시각까지 기다리기",
+    "volume_set": "🔊 볼륨을 ○%로 맞추기",
     "media": "🔊 볼륨·미디어",
     "program": "🚀 프로그램 실행",
     "url": "🌐 웹사이트 열기",
@@ -169,6 +170,18 @@ class MacroRunner(QObject):
                         break
                     continue
                 if not val:
+                    continue
+                if st == "volume_set":
+                    try:
+                        pct = int(val)
+                    except ValueError:
+                        continue
+                    from core.audio_state import set_master_volume
+                    r_ok, r_msg = set_master_volume(pct, from_worker=True)
+                    if not r_ok:
+                        ok, msg = False, r_msg
+                        break
+                    time.sleep(0.05)
                     continue
                 if st == "media" and val == "MicMute":
                     from core.audio_state import toggle_mic_mute

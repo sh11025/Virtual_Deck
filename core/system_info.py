@@ -18,12 +18,39 @@ INFO_KINDS = {
     "clock": ("시계", "clock"),
     "clock_sec": ("시계(초 포함)", "clock"),
     "clock12": ("시계(오전/오후)", "clock"),
+    "clock12_sec": ("시계(오전/오후·초 포함)", "clock"),
     "date": ("날짜", "calendar"),
     "volume": ("볼륨 %", "volume_up"),
     "battery": ("배터리", "power"),
     "cpu": ("CPU 사용량", "chart"),
     "memory": ("메모리 사용량", "monitor"),
 }
+
+HIDDEN_KINDS = {"clock_sec", "clock12", "clock12_sec"}
+
+
+def clock_kind(ampm: bool, seconds: bool) -> str:
+    """(False,False)→"clock", (False,True)→"clock_sec", (True,False)→"clock12", (True,True)→"clock12_sec" """
+    if ampm and seconds:
+        return "clock12_sec"
+    if ampm:
+        return "clock12"
+    if seconds:
+        return "clock_sec"
+    return "clock"
+
+
+def clock_options(kind: str) -> Optional[Tuple[bool, bool]]:
+    """시계 종류가 아니면 None, 맞으면 (ampm, seconds)"""
+    if kind == "clock":
+        return (False, False)
+    if kind == "clock_sec":
+        return (False, True)
+    if kind == "clock12":
+        return (True, False)
+    if kind == "clock12_sec":
+        return (True, True)
+    return None
 
 WEEKDAYS = "월화수목금토일"
 
@@ -114,6 +141,11 @@ def _read(kind: str) -> Tuple[str, str, Optional[float]]:
         h = now.hour % 12
         h = 12 if h == 0 else h
         return f"{am_pm} {h}:{now.minute:02d}", f"{now.month}/{now.day} ({WEEKDAYS[now.weekday()]})", None
+    if kind == "clock12_sec":
+        am_pm = "오전" if now.hour < 12 else "오후"
+        h = now.hour % 12
+        h = 12 if h == 0 else h
+        return f"{am_pm} {h}:{now.minute:02d}:{now.second:02d}", f"{now.month}/{now.day} ({WEEKDAYS[now.weekday()]})", None
     if kind == "date":
         return f"{now.month}.{now.day}", f"{WEEKDAYS[now.weekday()]}요일", None
     if kind == "volume":
@@ -141,9 +173,14 @@ def parse_kinds(action_data: str, limit: int = 4) -> List[str]:
     raw = (action_data or "").split(",")
     seen = set()
     res = []
+    has_clock = False
     for item in raw:
         k = item.strip()
         if k in INFO_KINDS and k not in seen:
+            if k in ("clock", "clock_sec", "clock12", "clock12_sec"):
+                if has_clock:
+                    continue
+                has_clock = True
             seen.add(k)
             res.append(k)
             if len(res) >= limit:

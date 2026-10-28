@@ -57,8 +57,8 @@ class ShortcutManager:
     ] + [(f"F{i}", f"F{i}") for i in range(1, 25)]
 
     MEDIA_KEYS = [
-        ("VolumeUp", "🔊 볼륨 올리기"),
-        ("VolumeDown", "🔉 볼륨 내리기"),
+        ("VolumeUp", "🔊 볼륨 올리기 (한 번에 약 2%)"),
+        ("VolumeDown", "🔉 볼륨 내리기 (한 번에 약 2%)"),
         ("VolumeMute", "🔇 음소거"),
         ("MediaPlayPause", "⏯ 재생 / 일시정지"),
         ("MediaNext", "⏭ 다음 곡"),
@@ -144,5 +144,13 @@ class ShortcutManager:
     def media_label(cls, key: str) -> str:
         for k, label in cls.MEDIA_KEYS:
             if k.lower() == key.lower():
+                try:
+                    import inspect
+                    frame = inspect.currentframe()
+                    back = frame.f_back if frame else None
+                    if back and back.f_code.co_name == "_auto_name":
+                        return label.split("(", 1)[0].strip()
+                except Exception:
+                    pass
                 return label
         return key

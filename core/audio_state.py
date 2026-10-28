@@ -9,7 +9,7 @@ Windows 소리 장치에서 스피커·마이크 음소거 상태와 볼륨을 �
 
 import sys
 import time
-from typing import Optional
+from typing import Optional, Tuple
 
 _cache = {}          # 'speaker' / 'mic' → (장치 객체, 가져온 시각)
 _CACHE_SECONDS = 10  # 기본 장치가 바뀔 수 있어 10초마다 다시 가져옴
@@ -27,14 +27,13 @@ def is_available() -> bool:
     if sys.platform != "win32" or _failed:
         return False
     try:
-        import pycaw  # noqa: F401
+        __import__("pycaw")
         return True
     except Exception:
         return False
 
 
 def _endpoint(kind: str, use_cache: bool = True):
-    global _failed
     if not is_available():
         return None
     now = time.monotonic()
@@ -129,3 +128,57 @@ def get_volume() -> Optional[int]:
     except Exception:
         _cache.pop("speaker", None)
         return None
+
+
+def volume_key_plan(percent: int) -> Tuple[int, int]:
+    """pycaw 가 없을 때: 먼저 내리기를 몇 번, 그다음 올리기를 몇 번 누를지."""
+    percent = max(0, min(100, int(percent)))
+    return 50, round(percent / 2)
+
+
+def set_master_volume(percent: int, from_worker: bool = False) -> Tuple[bool, str]:
+    try:
+        p = max(0, min(100, int(percent)))
+    except (ValueError, TypeError):
+        return False, f"올바른 볼륨 값이 아니에요: {percent}"
+
+    com_inited = False
+    ev = None
+    try:
+        if is_available():
+            if from_worker:
+                try:
+                    import comtypes
+                    comtypes.CoInitialize()
+                    com_inited = True
+                except Exception:
+                    pass
+            ev = _endpoint("speaker", use_cache=not from_worker)
+            if ev is not None:
+                ev.SetMasterVolumeLevelScalar(p / 100.0, None)
+                return True, f"볼륨 {p}%"
+    except Exception:
+        _cache.pop("speaker", None)
+    finally:
+        ev = None
+        if com_inited:
+            try:
+                import gc
+                gc.collect()
+                import comtypes
+                comtypes.CoUninitialize()
+            except Exception:
+                pass
+
+    try:
+        from core.shortcut_manager import ShortcutManager
+        down_cnt, up_cnt = volume_key_plan(p)
+        for _ in range(down_cnt):
+            ShortcutManager.send_shortcut("VolumeDown")
+            time.sleep(0.01)
+        for _ in range(up_cnt):
+            ShortcutManager.send_shortcut("VolumeUp")
+            time.sleep(0.01)
+        return True, f"볼륨 {p}%"
+    except Exception as e:
+        return False, f"볼륨을 바꾸지 못했어요: {e}"

@@ -13,6 +13,7 @@ from PySide6.QtGui import QPainter, QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox, QStackedWidget,
     QFileDialog, QScrollArea, QFrame, QSizePolicy, QCheckBox, QGridLayout, QTimeEdit,
+    QAbstractSpinBox,
 )
 
 from core import paths
@@ -222,7 +223,7 @@ class ActionEditor(QWidget):
         if t == "schedule":
             return self._schedule_page()
         if t == "info":
-            from core.system_info import INFO_KINDS
+            from core.system_info import INFO_KINDS, HIDDEN_KINDS
             w = QWidget()
             v = QVBoxLayout(w)
             v.setContentsMargins(0, 0, 0, 0)
@@ -233,11 +234,44 @@ class ActionEditor(QWidget):
             grid.setHorizontalSpacing(6)
             grid.setVerticalSpacing(2)
             w.checkboxes = {}
-            for idx, (key, (label, _icon)) in enumerate(INFO_KINDS.items()):
+
+            # 시계 체크박스
+            cb_clock = QCheckBox("시계")
+            cb_clock.toggled.connect(lambda *_: self._on_info_toggled())
+            w.checkboxes["clock"] = cb_clock
+            grid.addWidget(cb_clock, 0, 0)
+
+            # 시계 아래 작은 선택 칸 2개 (안쪽으로 들여쓰기)
+            clock_sub = QWidget()
+            cs_lay = QVBoxLayout(clock_sub)
+            cs_lay.setContentsMargins(18, 0, 0, 0)
+            cs_lay.setSpacing(2)
+            w.cb_ampm = QCheckBox("오전/오후로 보기")
+            w.cb_sec = QCheckBox("초까지 보기")
+            for scb in (w.cb_ampm, w.cb_sec):
+                scb.toggled.connect(lambda *_: self.changed.emit())
+                cs_lay.addWidget(scb)
+            grid.addWidget(clock_sub, 1, 0)
+
+            def _sync_clock_sub():
+                on = cb_clock.isChecked()
+                w.cb_ampm.setEnabled(on)
+                w.cb_sec.setEnabled(on)
+
+            w._sync_clock_sub = _sync_clock_sub
+            cb_clock.toggled.connect(lambda *_: _sync_clock_sub())
+            _sync_clock_sub()
+
+            # HIDDEN_KINDS 및 clock을 제외한 나머지 종류들 배치
+            remaining = [k for k in INFO_KINDS if k not in HIDDEN_KINDS and k != "clock"]
+            coords = [(0, 1), (1, 1), (2, 0), (2, 1), (3, 0)]
+            for (r, c), key in zip(coords, remaining):
+                label, _icon = INFO_KINDS[key]
                 cb = QCheckBox(label)
                 cb.toggled.connect(lambda *_: self._on_info_toggled())
                 w.checkboxes[key] = cb
-                grid.addWidget(cb, idx // 2, idx % 2)
+                grid.addWidget(cb, r, c)
+
             v.addLayout(grid)
             w.limit_hint = hint_label("")
             w.limit_hint.setVisible(False)
@@ -287,6 +321,9 @@ class ActionEditor(QWidget):
         w.start_time = QTimeEdit()
         w.start_time.setDisplayFormat("HH:mm")
         w.start_time.setTime(QTime(9, 0))
+        w.start_time.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        w.start_time.setAlignment(Qt.AlignCenter)
+        w.start_time.setFixedWidth(92)
         w.start_type = no_wheel(QComboBox())
         w.start_type.setMinimumContentsLength(4)
         w.start_type.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -308,6 +345,9 @@ class ActionEditor(QWidget):
         w.end_time = QTimeEdit()
         w.end_time.setDisplayFormat("HH:mm")
         w.end_time.setTime(QTime(18, 0))
+        w.end_time.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        w.end_time.setAlignment(Qt.AlignCenter)
+        w.end_time.setFixedWidth(92)
         w.end_type = no_wheel(QComboBox())
         w.end_type.setMinimumContentsLength(4)
         w.end_type.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -513,6 +553,9 @@ class ActionEditor(QWidget):
         self._refit()
 
     def _on_info_toggled(self):
+        page = self.pages.get("info")
+        if page and hasattr(page, "_sync_clock_sub"):
+            page._sync_clock_sub()
         self._update_info_hint()
         self.changed.emit()
 
@@ -529,8 +572,15 @@ class ActionEditor(QWidget):
         if t == "media":
             return t, page.combo.currentData()
         if t == "info":
-            from core.system_info import INFO_KINDS
-            selected = [k for k in INFO_KINDS if page.checkboxes.get(k) and page.checkboxes[k].isChecked()]
+            from core.system_info import INFO_KINDS, clock_kind
+            selected = []
+            for k in INFO_KINDS:
+                if k == "clock" and page.checkboxes.get("clock") and page.checkboxes["clock"].isChecked():
+                    ampm = getattr(page, "cb_ampm", None) and page.cb_ampm.isChecked()
+                    sec = getattr(page, "cb_sec", None) and page.cb_sec.isChecked()
+                    selected.append(clock_kind(bool(ampm), bool(sec)))
+                elif page.checkboxes.get(k) and page.checkboxes[k].isChecked():
+                    selected.append(k)
             return t, ",".join(selected) if selected else "clock"
         if t == "profile":
             return t, page.combo.currentData() or ""
@@ -579,12 +629,36 @@ class ActionEditor(QWidget):
             i = page.combo.findData(data)
             page.combo.setCurrentIndex(max(0, i))
         elif t == "info":
-            from core.system_info import parse_kinds, INFO_KINDS
-            selected_set = set(parse_kinds(data, len(INFO_KINDS)))
+            from core.system_info import parse_kinds, INFO_KINDS, clock_options
+            kinds = parse_kinds(data, len(INFO_KINDS))
+            selected_set = set(kinds)
+            clock_found = None
+            for k in kinds:
+                opts = clock_options(k)
+                if opts is not None:
+                    clock_found = opts
+                    break
+            if hasattr(page, "cb_ampm") and hasattr(page, "cb_sec"):
+                page.cb_ampm.blockSignals(True)
+                page.cb_sec.blockSignals(True)
+                if clock_found is not None:
+                    page.cb_ampm.setChecked(clock_found[0])
+                    page.cb_sec.setChecked(clock_found[1])
+                else:
+                    page.cb_ampm.setChecked(False)
+                    page.cb_sec.setChecked(False)
+                page.cb_ampm.blockSignals(False)
+                page.cb_sec.blockSignals(False)
+
             for k, cb in page.checkboxes.items():
                 cb.blockSignals(True)
-                cb.setChecked(k in selected_set)
+                if k == "clock":
+                    cb.setChecked(clock_found is not None)
+                else:
+                    cb.setChecked(k in selected_set)
                 cb.blockSignals(False)
+            if hasattr(page, "_sync_clock_sub"):
+                page._sync_clock_sub()
             self._update_info_hint()
         elif t == "profile":
             i = page.combo.findData(data)

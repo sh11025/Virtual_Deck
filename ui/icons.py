@@ -701,6 +701,331 @@ _reg("작업 · 생활", [
     ("sun", "해", "☀️", _sun), ("moon", "달", "🌙", _moon),
 ])
 
+
+# ------------------------------------------------------------------ 추가 아이콘 (1.9.1)
+def _robot(c):
+    c.both(rrect(-.7, -.35, 1.4, 1.05, .28))
+    c.stroke(poly((0, -.35), (0, -.7)))
+    c.solid(circle(0, -.8, .1))
+    c.solid(circle(-.28, .05, .11))
+    c.solid(circle(.28, .05, .11))
+    c.stroke(poly((-.25, .42), (.25, .42)))
+    c.stroke(poly((-.7, .1), (-.88, .1)))
+    c.stroke(poly((.7, .1), (.88, .1)))
+
+
+def _sparkle(c):
+    pts = [(0, -.85), (.16, -.16), (.85, 0), (.16, .16), (0, .85), (-.16, .16), (-.85, 0), (-.16, -.16)]
+    big = [(x * .72 - .1, y * .72 + .12) for x, y in pts]
+    c.both(poly(*big, close=True))
+    for x, y, s in ((.62, -.62, .2), (.7, -.12, .1)):
+        c.stroke(poly((x - s, y), (x + s, y)))
+        c.stroke(poly((x, y - s), (x, y + s)))
+
+
+def _chip(c):
+    c.both(rrect(-.5, -.5, 1.0, 1.0, .15))
+    c.stroke(rrect(-.2, -.2, .4, .4, .06))
+    for t in (-.28, 0, .28):
+        c.stroke(poly((t, -.5), (t, -.82)))
+        c.stroke(poly((t, .5), (t, .82)))
+        c.stroke(poly((-.5, t), (-.82, t)))
+        c.stroke(poly((.5, t), (.82, t)))
+
+
+def _git(c):
+    c.stroke(poly((-.45, -.42), (-.45, .42)))
+    c.stroke(poly((.45, -.42), (.45, -.12), (-.45, .3)))
+    c.both(circle(-.45, -.6, .18))
+    c.both(circle(-.45, .6, .18))
+    c.both(circle(.45, -.6, .18))
+
+
+def _bug(c):
+    c.both(ellipse(0, .12, .42, .58))
+    c.both(circle(0, -.62, .2))
+    c.stroke(poly((0, -.4), (0, .7)))
+    for y in (-.15, .15, .45):
+        c.stroke(poly((-.42, y), (-.8, y - .12)))
+        c.stroke(poly((.42, y), (.8, y - .12)))
+    c.stroke(poly((-.12, -.76), (-.3, -.92)))
+    c.stroke(poly((.12, -.76), (.3, -.92)))
+
+
+def _database(c):
+    c.both(ellipse(0, -.5, .65, .24))
+    c.stroke(poly((-.65, -.5), (-.65, .5)))
+    c.stroke(poly((.65, -.5), (.65, .5)))
+    for y in (0, .5):
+        path = QPainterPath(QPointF(-.65, y))
+        path.cubicTo(QPointF(-.65, y + .38), QPointF(.65, y + .38), QPointF(.65, y))
+        c.stroke(path)
+
+
+def _server(c):
+    c.both(rrect(-.75, -.72, 1.5, .62, .16))
+    c.both(rrect(-.75, .1, 1.5, .62, .16))
+    c.solid(circle(-.5, -.41, .07))
+    c.solid(circle(-.5, .41, .07))
+    c.stroke(poly((0, -.41), (.5, -.41)))
+    c.stroke(poly((0, .41), (.5, .41)))
+
+
+def _braces(c):
+    c.stroke(poly((-.1, -.8), (-.35, -.8), (-.35, -.15), (-.7, 0), (-.35, .15), (-.35, .8), (-.1, .8)))
+    c.stroke(poly((.1, -.8), (.35, -.8), (.35, -.15), (.7, 0), (.35, .15), (.35, .8), (.1, .8)))
+
+
+def _wifi(c):
+    for r in (.35, .65, .95):
+        c.stroke(arc(0, .45, r, 45, 90))
+    c.solid(circle(0, .52, .09))
+
+
+def _battery(c):
+    c.both(rrect(-.8, -.38, 1.4, .76, .18))
+    c.solid(rrect(.62, -.15, .18, .3, .05))
+    c.solid(rrect(-.62, -.2, .7, .4, .08))
+
+
+def _bluetooth(c):
+    c.stroke(poly((-.45, -.4), (.4, .4), (0, .8), (0, -.8), (.4, -.4), (-.45, .4)))
+
+
+def _laptop(c):
+    c.both(rrect(-.6, -.65, 1.2, .8, .12))
+    c.both(poly((-.85, .35), (.85, .35), (.7, .62), (-.7, .62), close=True))
+
+
+def _headphones(c):
+    c.stroke(arc(0, .05, .65, 0, 180))
+    c.both(rrect(-.8, 0, .3, .62, .12))
+    c.both(rrect(.5, 0, .3, .62, .12))
+
+
+def _mouse(c):
+    c.both(rrect(-.45, -.8, .9, 1.6, .45))
+    c.stroke(poly((0, -.8), (0, -.1)))
+    c.stroke(poly((-.45, -.1), (.45, -.1)))
+
+
+def _shutdown(c):
+    c.stroke(arc(0, .1, .62, 120, 300))
+    c.stroke(poly((0, -.85), (0, -.1)))
+
+
+def _sliders(c):
+    for y, x in ((-.5, -.3), (0, .35), (.5, -.05)):
+        c.stroke(poly((-.8, y), (.8, y)))
+        c.both(circle(x, y, .17))
+
+
+def _info(c):
+    c.both(circle(0, 0, .82))
+    c.solid(circle(0, -.38, .09))
+    c.stroke(poly((0, -.1), (0, .45)))
+
+
+def _warning(c):
+    c.both(poly((0, -.8), (.85, .7), (-.85, .7), close=True))
+    c.stroke(poly((0, -.25), (0, .2)))
+    c.solid(circle(0, .47, .08))
+
+
+def _question(c):
+    c.both(circle(0, 0, .82))
+    path = QPainterPath()
+    path.arcMoveTo(QRectF(-.26, -.5, .52, .52), 150)
+    path.arcTo(QRectF(-.26, -.5, .52, .52), 150, -240)
+    c.stroke(path)
+    c.stroke(poly((0, .02), (0, .14)))
+    c.solid(circle(0, .45, .08))
+
+
+def _key(c):
+    c.both(circle(-.42, -.3, .36))
+    c.stroke(poly((-.17, -.05), (.75, .75)))
+    c.stroke(poly((.4, .4), (.6, .2)))
+    c.stroke(poly((.6, .6), (.8, .4)))
+
+
+def _eye(c):
+    path = QPainterPath(QPointF(-.88, 0))
+    path.cubicTo(QPointF(-.4, -.75), QPointF(.4, -.75), QPointF(.88, 0))
+    path.cubicTo(QPointF(.4, .75), QPointF(-.4, .75), QPointF(-.88, 0))
+    c.both(path)
+    c.solid(circle(0, 0, .22))
+
+
+def _book(c):
+    c.both(poly((0, -.5), (-.82, -.62), (-.82, .5), (0, .62), close=True))
+    c.both(poly((0, -.5), (.82, -.62), (.82, .5), (0, .62), close=True))
+
+
+def _checklist(c):
+    for y in (-.5, 0, .5):
+        c.both(rrect(-.8, y - .14, .28, .28, .07))
+        c.stroke(poly((-.3, y), (.8, y)))
+
+
+def _printer(c):
+    c.both(rrect(-.45, -.8, .9, .7, .06))
+    c.both(rrect(-.85, -.1, 1.7, .7, .16))
+    c.both(rrect(-.45, .3, .9, .55, .06))
+
+
+def _wrench(c):
+    c.stroke(poly((-.75, .75), (.1, -.1)), c.width * 2.2)
+    c.both(arc(.4, -.4, .36, 70, 290))
+
+
+def _calculator(c):
+    c.both(rrect(-.6, -.85, 1.2, 1.7, .2))
+    c.both(rrect(-.4, -.65, .8, .35, .07))
+    for x in (-.25, 0, .25):
+        for y in (0, .28, .56):
+            c.solid(circle(x, y, .06))
+
+
+def _archive(c):
+    c.both(rrect(-.85, -.7, 1.7, .45, .1))
+    c.both(rrect(-.7, -.25, 1.4, 1.0, .1))
+    c.stroke(poly((-.2, .05), (.2, .05)))
+
+
+def _layers(c):
+    c.both(poly((0, -.8), (.85, -.3), (0, .2), (-.85, -.3), close=True))
+    c.stroke(poly((-.85, .05), (0, .55), (.85, .05)))
+    c.stroke(poly((-.85, .4), (0, .9), (.85, .4)))
+
+
+def _filter(c):
+    c.both(poly((-.85, -.7), (.85, -.7), (.12, .05), (.12, .8), (-.12, .65), (-.12, .05), close=True))
+
+
+def _flag(c):
+    c.stroke(poly((-.6, .9), (-.6, -.8)))
+    c.both(poly((-.6, -.8), (.75, -.5), (-.6, 0), close=True))
+
+
+def _cart(c):
+    c.stroke(poly((-.9, -.7), (-.6, -.7), (-.3, .3), (.65, .3), (.8, -.3), (-.5, -.3)))
+    c.solid(circle(-.2, .65, .1))
+    c.solid(circle(.55, .65, .1))
+
+
+def _gift(c):
+    c.both(rrect(-.7, -.2, 1.4, 1.0, .1))
+    c.both(rrect(-.8, -.5, 1.6, .35, .08))
+    c.stroke(poly((0, -.5), (0, .8)))
+    c.stroke(ellipse(-.22, -.7, .22, .14))
+    c.stroke(ellipse(.22, -.7, .22, .14))
+
+
+def _map_pin(c):
+    path = QPainterPath(QPointF(0, .9))
+    path.cubicTo(QPointF(-.9, -.1), QPointF(-.6, -.85), QPointF(0, -.85))
+    path.cubicTo(QPointF(.6, -.85), QPointF(.9, -.1), QPointF(0, .9))
+    c.both(path)
+    c.stroke(circle(0, -.2, .2))
+
+
+def _plane(c):
+    c.both(poly((0, -.9), (.14, -.3), (.85, .2), (.85, .4), (.14, .15), (.1, .65), (.35, .8), (.35, .9),
+                (0, .82), (-.35, .9), (-.35, .8), (-.1, .65), (-.14, .15), (-.85, .4), (-.85, .2),
+                (-.14, -.3), close=True))
+
+
+def _car(c):
+    c.both(rrect(-.85, -.1, 1.7, .6, .2))
+    c.both(poly((-.5, -.1), (-.3, -.55), (.3, -.55), (.5, -.1), close=True))
+    c.solid(circle(-.45, .55, .16))
+    c.solid(circle(.45, .55, .16))
+
+
+def _dumbbell(c):
+    c.stroke(poly((-.55, 0), (.55, 0)))
+    c.both(rrect(-.78, -.42, .24, .84, .07))
+    c.both(rrect(.54, -.42, .24, .84, .07))
+    c.stroke(poly((-.9, -.2), (-.9, .2)))
+    c.stroke(poly((.9, -.2), (.9, .2)))
+
+
+def _school(c):
+    c.both(poly((0, -.6), (.9, -.2), (0, .2), (-.9, -.2), close=True))
+    c.stroke(poly((-.5, .05), (-.5, .45), (0, .7), (.5, .45), (.5, .05)))
+    c.stroke(poly((.9, -.2), (.9, .35)))
+
+
+def _leaf(c):
+    path = QPainterPath(QPointF(-.7, .7))
+    path.cubicTo(QPointF(-.8, -.2), QPointF(-.1, -.8), QPointF(.8, -.8))
+    path.cubicTo(QPointF(.8, -.1), QPointF(.4, .6), QPointF(-.7, .7))
+    c.both(path)
+    c.stroke(poly((-.7, .7), (.1, -.1)))
+
+
+def _umbrella(c):
+    path = QPainterPath(QPointF(-.85, 0))
+    path.arcTo(QRectF(-.85, -.85, 1.7, 1.7), 180, -180)
+    path.closeSubpath()
+    c.both(path)
+    c.stroke(poly((0, 0), (0, .62)))
+    c.stroke(arc(-.15, .62, .15, 180, 180))
+
+
+def _wallet(c):
+    c.both(rrect(-.85, -.5, 1.7, 1.2, .2))
+    c.both(rrect(.2, 0, .65, .4, .12))
+    c.solid(circle(.45, .2, .06))
+
+
+def _tv(c):
+    c.both(rrect(-.85, -.55, 1.7, 1.1, .18))
+    c.stroke(poly((-.3, .8), (.3, .8)))
+    c.stroke(poly((0, .55), (0, .8)))
+    c.stroke(poly((-.3, -.55), (0, -.82), (.3, -.55)))
+
+
+def _crown(c):
+    c.both(poly((-.8, .55), (-.9, -.45), (-.4, 0), (0, -.65), (.4, 0), (.9, -.45), (.8, .55), close=True))
+    c.stroke(poly((-.8, .55), (.8, .55)))
+
+
+def _droplet(c):
+    path = QPainterPath(QPointF(0, -.85))
+    path.cubicTo(QPointF(.2, -.4), QPointF(.75, 0), QPointF(.7, .4))
+    path.cubicTo(QPointF(.65, .85), QPointF(-.65, .85), QPointF(-.7, .4))
+    path.cubicTo(QPointF(-.75, 0), QPointF(-.2, -.4), QPointF(0, -.85))
+    c.both(path)
+
+
+_reg("AI · 개발", [
+    ("robot", "로봇", "🤖", _robot), ("sparkle", "반짝", "✨", _sparkle), ("chip", "칩", "🧠", _chip),
+    ("git", "가지치기", "🌳", _git), ("bug", "버그", "🐛", _bug), ("database", "데이터", "🗄️", _database),
+    ("server", "서버", "🗃️", _server), ("braces", "코드 블록", "🔣", _braces), ("wifi", "와이파이", "📶", _wifi),
+])
+_reg("시스템", [
+    ("battery", "배터리", "🔋", _battery), ("bluetooth", "블루투스", "🔷", _bluetooth),
+    ("laptop", "노트북", "📟", _laptop), ("headphones", "헤드폰", "🎧", _headphones),
+    ("mouse", "마우스", "🖱️", _mouse), ("shutdown", "종료", "⭕", _shutdown),
+    ("sliders", "조절", "🎚️", _sliders), ("info", "정보", "ℹ️", _info), ("warning", "주의", "⚠️", _warning),
+    ("question", "도움말", "❓", _question), ("key", "열쇠", "🔑", _key), ("eye", "보기", "👁️", _eye),
+])
+_reg("문서 · 도구", [
+    ("book", "책", "📖", _book), ("checklist", "할 일", "☑️", _checklist), ("printer", "인쇄", "🖨️", _printer),
+    ("wrench", "도구", "🔧", _wrench), ("calculator", "계산기", "🧮", _calculator),
+    ("archive", "보관함", "📦", _archive), ("layers", "겹치기", "📚", _layers), ("filter", "필터", "🔽", _filter),
+    ("flag", "깃발", "🚩", _flag),
+])
+_reg("생활 · 여가", [
+    ("cart", "장바구니", "🛒", _cart), ("gift", "선물", "🎁", _gift), ("map_pin", "위치", "📍", _map_pin),
+    ("plane", "비행기", "✈️", _plane), ("car", "자동차", "🚗", _car), ("dumbbell", "운동", "🏋️", _dumbbell),
+    ("school", "학교", "🎓", _school), ("leaf", "나뭇잎", "🍃", _leaf), ("umbrella", "우산", "☂️", _umbrella),
+    ("wallet", "지갑", "👛", _wallet), ("tv", "TV", "📺", _tv), ("crown", "왕관", "👑", _crown),
+    ("droplet", "물방울", "💧", _droplet),
+])
+
 CATEGORIES = []
 for _n, (_l, _e, _f, _c) in REGISTRY.items():
     if _c not in CATEGORIES:
@@ -722,7 +1047,7 @@ ACTION_DEFAULT_ICONS = {
     "url": "globe", "program": "rocket", "file": "file", "folder": "folder", "shortcut": "keyboard",
     "media": "volume_up", "macro": "bolt", "group": "grid", "info": "clock", "timer": "timer",
     "profile": "user",
-    "back": "back",
+    "back": "arrow_left",
 }
 MEDIA_DEFAULT_ICONS = {
     "VolumeUp": "volume_up", "VolumeDown": "volume_down", "VolumeMute": "volume_mute",

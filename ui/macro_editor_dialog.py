@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, Signal, QRectF, QTimer, QTime
 from PySide6.QtGui import QPainter, QColor, QFont, QKeyEvent
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QLineEdit, QWidget,
-    QStackedWidget, QFileDialog, QLabel, QTimeEdit, QSpinBox,
+    QStackedWidget, QFileDialog, QLabel, QTimeEdit, QSpinBox, QAbstractSpinBox,
 )
 
 from core.macro_manager import STEP_TYPES, parse_steps, ms_to_unit, unit_to_ms
@@ -252,10 +252,27 @@ class MacroEditorDialog(GlassDialog):
         self.time_edit = no_wheel(QTimeEdit())
         self.time_edit.setDisplayFormat("HH:mm")
         self.time_edit.setTime(QTime.currentTime())
+        self.time_edit.setButtonSymbols(QAbstractSpinBox.NoButtons)
         self.time_edit.setAlignment(Qt.AlignCenter)
-        wl.addWidget(self.time_edit)
+        self.time_edit.setFixedWidth(110)
+        wl.addWidget(self.time_edit, 0, Qt.AlignLeft)
         wl.addWidget(hint_label("매일 이 시각이 될 때까지 기다립니다. 이미 지난 시각이면 내일 실행해요."))
         self.stack.addWidget(wu_w)
+
+        # 볼륨 맞추기 (volume_set)
+        vol_w = QWidget()
+        vl = QVBoxLayout(vol_w)
+        vl.setContentsMargins(0, 0, 0, 0)
+        vl.setSpacing(6)
+        self.vol_spin = no_wheel(QSpinBox())
+        self.vol_spin.setRange(0, 100)
+        self.vol_spin.setSuffix(" %")
+        self.vol_spin.setValue(50)
+        self.vol_spin.setAlignment(Qt.AlignCenter)
+        self.vol_spin.setFixedWidth(110)
+        vl.addWidget(self.vol_spin, 0, Qt.AlignLeft)
+        vl.addWidget(hint_label("마스터 볼륨을 지정한 퍼센트로 설정합니다."))
+        self.stack.addWidget(vol_w)
 
         self.body.addWidget(self.stack)
 
@@ -292,6 +309,8 @@ class MacroEditorDialog(GlassDialog):
             return f"⏱ {n}{u} 기다리기"
         elif t == "wait_until":
             return f"🕒 {v} 까지 기다리기"
+        elif t == "volume_set":
+            return f"🔊 볼륨 {v}% 로 맞추기"
         elif t == "media":
             v = ShortcutManager.media_label(v).split(" ", 1)[-1]
         elif t == "text":
@@ -354,6 +373,8 @@ class MacroEditorDialog(GlassDialog):
             self.stack.setCurrentIndex(3)
         elif t == "wait_until":
             self.stack.setCurrentIndex(4)
+        elif t == "volume_set":
+            self.stack.setCurrentIndex(5)
         else:
             self.stack.setCurrentIndex(1)
             info = {
@@ -382,6 +403,8 @@ class MacroEditorDialog(GlassDialog):
             return t, str(ms)
         if t == "wait_until":
             return t, self.time_edit.time().toString("HH:mm")
+        if t == "volume_set":
+            return t, str(self.vol_spin.value())
         v = self.val_edit.text()
         return t, (v if t == "text" else v.strip())
 
@@ -433,6 +456,11 @@ class MacroEditorDialog(GlassDialog):
             t = QTime.fromString(s["value"], "HH:mm")
             if t.isValid():
                 self.time_edit.setTime(t)
+        elif s["type"] == "volume_set":
+            try:
+                self.vol_spin.setValue(int(s["value"]))
+            except ValueError:
+                self.vol_spin.setValue(50)
         else:
             self.val_edit.setText(s["value"])
         self.editor_title.setText(f"{r + 1}번 단계 수정 중")
@@ -447,6 +475,7 @@ class MacroEditorDialog(GlassDialog):
         self.delay_spin.setValue(1)
         self.delay_unit.setCurrentText("초")
         self.time_edit.setTime(QTime.currentTime())
+        self.vol_spin.setValue(50)
         self.editor_title.setText("새 단계 추가")
         self.add_btn.setText("단계 추가")
         self.add_btn.icon_name = "plus"

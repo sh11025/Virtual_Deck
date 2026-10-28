@@ -1021,7 +1021,7 @@ class MainWindow(QWidget):
                     bid_back = DeckButtonData.make_id(r_last, c_first)
                     new.children[bid_back] = DeckButtonData(
                         id=bid_back, row=r_last, col=c_first,
-                        name="나가기", action_type="back", icon="back", color="gray",
+                        name="나가기", action_type="back", icon="icon:arrow_left", color="gray",
                     )
                 self.storage._fill(new.children, self.config.rows, self.config.cols)
             else:

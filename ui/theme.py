@@ -407,7 +407,7 @@ def get_qss() -> str:
     QLabel[role="title"] {{ font-size: {fs(20)}px; font-weight: 700; }}
     QLabel[role="value"] {{ font-size: {fs(13)}px; font-weight: 600; color: {t.text_dim}; min-width: 44px; }}
 
-    QLineEdit, QComboBox, QSpinBox, QPlainTextEdit {{
+    QLineEdit, QComboBox, QSpinBox, QTimeEdit, QPlainTextEdit {{
         background: {t.input_bg};
         border: 1px solid {t.input_border};
         border-bottom: 1px solid {t.input_border_low};
@@ -417,13 +417,15 @@ def get_qss() -> str:
         selection-color: #ffffff;
         font-weight: 500;
     }}
-    QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QPlainTextEdit:hover {{
+    QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QTimeEdit:hover, QPlainTextEdit:hover {{
         border: 1px solid {t.accent};
     }}
-    QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QPlainTextEdit:focus {{
+    QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTimeEdit:focus, QPlainTextEdit:focus {{
         background: {t.input_bg_focus};
         border: 1.5px solid {t.accent};
     }}
+    QTimeEdit {{ color: {t.text}; padding: 7px 10px; }}
+    QTimeEdit::up-button, QTimeEdit::down-button {{ width: 0px; border: none; }}
     QLineEdit[capturing="true"] {{
         border: 1.5px solid {t.accent};
         background: {t.select_bg};

@@ -88,12 +88,16 @@ class DeckButtonData:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DeckButtonData":
+        action_type = data.get("action_type", "none")
+        icon = data.get("icon", "")
+        if action_type == "back" and icon in ("", "back", "icon:back"):
+            icon = "icon:arrow_left"
         children = {k: cls.from_dict(v) for k, v in (data.get("children") or {}).items()}
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
-            icon=data.get("icon", ""),
-            action_type=data.get("action_type", "none"),
+            icon=icon,
+            action_type=action_type,
             action_data=data.get("action_data", ""),
             row=int(data.get("row", 0)),
             col=int(data.get("col", 0)),

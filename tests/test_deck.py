@@ -28,7 +28,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
 
-from ui import theme  # noqa: E402
+from ui import theme, icons  # noqa: E402
 theme.load_fonts()
 
 import core.action_executor as AE  # noqa: E402
@@ -128,6 +128,9 @@ check(REAL_EXECUTE("url", "")[0] is False, "내용이 비면 url 은 실패")
 check("나가기" in AE.describe_action("back", ""), "describe_action('back', '') 에 '나가기' 포함됨")
 b_rt = DeckButtonData.from_dict(btn_back_test.to_dict())
 check(b_rt.action_type == "back", "to_dict -> from_dict 왕복 후에도 action_type 가 'back'")
+check(icons.is_theme_icon(icons.default_icon_for("back", "")), "back 기본 아이콘이 테마 아이콘으로 등록됨")
+check(DeckButtonData.from_dict({"id": "x", "action_type": "back", "icon": "back"}).icon == "icon:arrow_left", "back 버튼 icon 보정 (back -> icon:arrow_left)")
+check("QTimeEdit" in theme.get_qss(), "theme.get_qss 에 QTimeEdit 포함됨")
 
 check(st.count_outside(w.profiles, 2, 2) > 0, "칸 줄일 때 지워질 버튼 세기")
 p2 = {k: v.copy() for k, v in w.profiles.items()}
@@ -176,6 +179,55 @@ w._rebuild_grid()
 info = w.button_widgets["btn_2_2"].info
 check(info is not None and ":" in info[0], f"정보 버튼(시계) 값 표시: {info}")
 
+# 작업 N: 정보 버튼 시계 옵션 검사
+from core.system_info import clock_kind, clock_options, parse_kinds, read_info  # noqa: E402
+from ui.button_editor_dialog import ActionEditor  # noqa: E402
+check(
+    clock_kind(False, False) == "clock"
+    and clock_kind(False, True) == "clock_sec"
+    and clock_kind(True, False) == "clock12"
+    and clock_kind(True, True) == "clock12_sec",
+    "clock_kind 옵션별 변환",
+)
+check(
+    clock_options("clock12_sec") == (True, True) and clock_options("battery") is None,
+    "clock_options 시계 종류 판별 및 옵션 반환",
+)
+check(
+    parse_kinds("clock,clock_sec,battery", 4) == ["clock", "battery"],
+    "parse_kinds 시계 중복 제거",
+)
+r_info = read_info("clock12_sec")
+check(
+    r_info[0].count(":") == 2 and ("오전" in r_info[0] or "오후" in r_info[0]),
+    f"read_info('clock12_sec') 초와 오전/오후 표시: {r_info[0]}",
+)
+ed_info = ActionEditor(["info"])
+page_info = ed_info.pages["info"]
+check("시계(초 포함)" not in [cb.text() for cb in page_info.checkboxes.values()], "목록 체크박스에 '시계(초 포함)' 없음")
+page_info.checkboxes["clock"].setChecked(True)
+page_info.cb_ampm.setChecked(True)
+page_info.cb_sec.setChecked(True)
+check(ed_info.value() == ("info", "clock12_sec"), "시계+오전/오후+초 체크 시 value() == ('info', 'clock12_sec')")
+
+# 작업 O: 볼륨 조절 계획 및 연속 동작 볼륨 맞추기 검사
+from core.audio_state import volume_key_plan  # noqa: E402
+from core.macro_manager import STEP_TYPES, parse_steps  # noqa: E402
+
+check(
+    volume_key_plan(0) == (50, 0)
+    and volume_key_plan(50) == (50, 25)
+    and volume_key_plan(100) == (50, 50)
+    and volume_key_plan(150) == (50, 50),
+    "volume_key_plan 비율 계산",
+)
+check("volume_set" in STEP_TYPES, "'volume_set' 가 STEP_TYPES 에 있음")
+check(
+    parse_steps('[{"type":"volume_set","value":"30"}]') == [{"type": "volume_set", "value": "30"}],
+    "parse_steps 가 volume_set 단계를 그대로 읽음",
+)
+check("2%" in SM.media_label("VolumeUp"), "media_label('VolumeUp') 에 '2%' 포함됨")
+
 # ====================================================================
 section("프로필 자동 전환 (프로그램 + 창 제목)")
 from models.profile_model import DeckProfile  # noqa: E402
@@ -190,7 +242,42 @@ del w.profiles["p_yt"]
 # ====================================================================
 section("아이콘 테마 · 변환")
 from ui import icons as IC  # noqa: E402
-check(len(IC.REGISTRY) >= 70, f"테마 아이콘 {len(IC.REGISTRY)}개")
+check(len(IC.REGISTRY) >= 115, f"테마 아이콘 {len(IC.REGISTRY)}개")
+check(all(c in IC.CATEGORIES for c in ("AI · 개발", "시스템", "문서 · 도구", "생활 · 여가")), "카테고리에 새 묶음 4개 포함")
+
+NEW_ICON_NAMES = [
+    "robot", "sparkle", "chip", "git", "bug", "database", "server", "braces", "wifi",
+    "battery", "bluetooth", "laptop", "headphones", "mouse", "shutdown", "sliders",
+    "info", "warning", "question", "key", "eye", "book", "checklist", "printer",
+    "wrench", "calculator", "archive", "layers", "filter", "flag", "cart", "gift",
+    "map_pin", "plane", "car", "dumbbell", "school", "leaf", "umbrella", "wallet",
+    "tv", "crown", "droplet",
+]
+check(all(n in IC.REGISTRY for n in NEW_ICON_NAMES), "새 테마 아이콘 43개가 REGISTRY에 모두 있음")
+
+from PySide6.QtGui import QImage, QPainter, QColor  # noqa: E402
+from PySide6.QtCore import QRectF  # noqa: E402
+
+all_painted = True
+for n in NEW_ICON_NAMES:
+    for style in ("line", "duotone"):
+        img = QImage(64, 64, QImage.Format_ARGB32_Premultiplied)
+        p = QPainter(img)
+        ok = icons.paint_icon(p, f"icon:{n}", QRectF(0, 0, 64, 64), QColor("white"), style)
+        p.end()
+        if not ok:
+            all_painted = False
+            break
+    if not all_painted:
+        break
+check(all_painted, "새 아이콘 43개 모두 line 및 duotone 스타일 그리기 성공 (True 반환)")
+
+from ui.profile_manager_dialog import ProfileManagerDialog  # noqa: E402
+from ui.widgets import GlassButton  # noqa: E402
+pm_dlg = ProfileManagerDialog(dict(w.profiles), w.current_profile_id, w.storage, parent=w)
+pm_btn_texts = [btn.text() for btn in pm_dlg.findChildren(GlassButton)]
+check("추가" in pm_btn_texts and "템플릿" in pm_btn_texts, "프로필 관리 창 버튼 글자에 '추가' 와 '템플릿' 이 있음")
+pm_dlg.close()
 for p_ in w.profiles.values():
     p_.buttons["btn_0_0"].icon = "🔥"
 w._convert_emoji_icons()
