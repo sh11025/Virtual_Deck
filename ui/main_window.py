@@ -502,8 +502,11 @@ class MainWindow(QWidget):
                 w.edit_requested.connect(self._edit_button)
                 w.context_requested.connect(self._show_context_menu)
                 w.swapped.connect(self._swap_buttons)
-                if runner.is_running(self._macro_key(bid)):
-                    w.set_running(True)
+                for run_key in (self._macro_key(bid), self._macro_key(bid) + "#hold"):
+                    if runner.is_running(run_key):
+                        w.set_progress_source(lambda k=run_key: MacroRunner.instance().progress(k))
+                        w.set_running(True)
+                        break
                 self.grid.addWidget(w, r, c, sr, sc)
                 self.button_widgets[bid] = w
         self._on_live_tick()
@@ -832,7 +835,9 @@ class MainWindow(QWidget):
     def _on_macro_started(self, key: str):
         bid = self._widget_id_for_key(key)
         if bid:
-            self.button_widgets[bid].set_running(True)
+            w = self.button_widgets[bid]
+            w.set_progress_source(lambda k=key: MacroRunner.instance().progress(k))
+            w.set_running(True)
 
     def _on_macro_finished(self, key: str, ok: bool, msg: str):
         bid = self._widget_id_for_key(key)

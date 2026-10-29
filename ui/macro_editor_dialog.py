@@ -8,11 +8,11 @@ import json
 import time
 from typing import Dict, List
 
-from PySide6.QtCore import Qt, Signal, QRectF, QTimer, QTime
-from PySide6.QtGui import QPainter, QColor, QFont, QKeyEvent
+from PySide6.QtCore import Qt, Signal, QRectF, QTimer, QTime, QItemSelectionModel
+from PySide6.QtGui import QPainter, QColor, QFont, QKeyEvent, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem, QComboBox, QLineEdit, QWidget,
-    QStackedWidget, QFileDialog, QLabel, QTimeEdit, QSpinBox,
+    QStackedWidget, QFileDialog, QLabel, QTimeEdit, QSpinBox, QAbstractItemView,
 )
 
 from core.macro_manager import STEP_TYPES, parse_steps, ms_to_unit, unit_to_ms
@@ -141,6 +141,7 @@ class MacroRecorder(QWidget):
 
 class MacroEditorDialog(GlassDialog):
     VOLUME_SET = "__volume_set__"   # '볼륨 · 미디어' 안의 "정확한 크기로 맞추기" 항목
+    _clipboard: List[Dict[str, str]] = []   # 복사해 둔 단계들 (다른 버튼의 연속 동작에도 붙여넣을 수 있게 프로그램 안에서 공유)
 
     def __init__(self, macro_json: str = "", parent=None):
         super().__init__("연속 동작 만들기", "위에서 아래 순서로 차례대로 실행돼요", parent=parent, width=560)
@@ -149,9 +150,16 @@ class MacroEditorDialog(GlassDialog):
 
         self.list = QListWidget()
         self.list.setMinimumHeight(190)
+        self.list.setSelectionMode(QAbstractItemView.ExtendedSelection)   # Ctrl·Shift 로 여러 단계 선택
         self.list.itemDoubleClicked.connect(lambda _: self._load_selected())
-        self.list.currentRowChanged.connect(self._update_buttons)
+        self.list.itemSelectionChanged.connect(self._update_buttons)
         self.body.addWidget(self.list, 1)
+        self.body.addWidget(hint_label("Ctrl·Shift 를 누르고 눌러서 여러 단계를 한 번에 고를 수 있어요. "
+                                       "Ctrl+C 로 복사, Ctrl+V 로 붙여넣기 (다른 버튼의 연속 동작에도 붙여넣을 수 있어요)"))
+        for seq, fn in (("Ctrl+C", self._copy_steps), ("Ctrl+V", self._paste_steps)):
+            sc = QShortcut(QKeySequence(seq), self.list)
+            sc.setContext(Qt.WidgetShortcut)
+            sc.activated.connect(fn)
 
         ctl = QHBoxLayout()
         ctl.setSpacing(6)
@@ -334,38 +342,87 @@ class MacroEditorDialog(GlassDialog):
         self._update_buttons()
 
     def _selected(self) -> int:
-        r = self.list.currentRow()
-        return r if 0 <= r < len(self.steps) else -1
+        """한 단계만 골랐을 때 그 번호 (여러 개를 골랐거나 안 골랐으면 -1)"""
+        rows = self._selected_rows()
+        return rows[0] if len(rows) == 1 else -1
+
+    def _selected_rows(self) -> List[int]:
+        rows = sorted({self.list.row(i) for i in self.list.selectedItems()})
+        return [r for r in rows if 0 <= r < len(self.steps)]
+
+    def _select_rows(self, rows: List[int]) -> None:
+        self.list.clearSelection()
+        for r in rows:
+            item = self.list.item(r)
+            if item is not None:
+                item.setSelected(True)
+        if rows:
+            self.list.setCurrentRow(rows[-1], QItemSelectionModel.NoUpdate)
 
     def _update_buttons(self, *_):
-        r = self._selected()
-        has = r >= 0
-        self.up_btn.setEnabled(has and r > 0)
-        self.down_btn.setEnabled(has and r < len(self.steps) - 1)
-        for b in (self.edit_btn, self.dup_btn, self.del_btn):
+        rows = self._selected_rows()
+        has = bool(rows)
+        self.up_btn.setEnabled(has and rows[0] > 0)
+        self.down_btn.setEnabled(has and rows[-1] < len(self.steps) - 1)
+        self.edit_btn.setEnabled(len(rows) == 1)
+        for b in (self.dup_btn, self.del_btn):
             b.setEnabled(has)
 
     def _move(self, d):
-        r = self._selected()
-        n = r + d
-        if r < 0 or not (0 <= n < len(self.steps)):
+        rows = self._selected_rows()
+        if not rows:
             return
-        self.steps[r], self.steps[n] = self.steps[n], self.steps[r]
-        self._refresh_list(n)
+        n = len(self.steps)
+        if (d < 0 and rows[0] == 0) or (d > 0 and rows[-1] == n - 1):
+            return
+        sel = set(rows)
+        order = rows if d < 0 else list(reversed(rows))
+        for r in order:
+            self.steps[r], self.steps[r + d] = self.steps[r + d], self.steps[r]
+        moved = sorted(r + d for r in sel)
+        self._reset_editor()
+        self._refresh_list()
+        self._select_rows(moved)
 
     def _duplicate(self):
-        r = self._selected()
-        if r >= 0:
-            self.steps.insert(r + 1, dict(self.steps[r]))
-            self._refresh_list(r + 1)
+        """고른 단계들을 한꺼번에 복제해서 맨 마지막으로 고른 단계 바로 뒤에 붙여요"""
+        rows = self._selected_rows()
+        if not rows:
+            return
+        copies = [dict(self.steps[r]) for r in rows]
+        at = rows[-1] + 1
+        self.steps[at:at] = copies
+        self._reset_editor()
+        self._refresh_list()
+        self._select_rows(list(range(at, at + len(copies))))
+
+    def _copy_steps(self):
+        rows = self._selected_rows()
+        if rows:
+            MacroEditorDialog._clipboard = [dict(self.steps[r]) for r in rows]
+
+    def _paste_steps(self):
+        """복사해 둔 단계들을 고른 단계 뒤에(고른 게 없으면 맨 끝에) 붙여넣어요"""
+        clip = MacroEditorDialog._clipboard
+        if not clip:
+            return
+        rows = self._selected_rows()
+        at = rows[-1] + 1 if rows else len(self.steps)
+        self.steps[at:at] = [dict(s) for s in clip]
+        self._reset_editor()
+        self._refresh_list()
+        self._select_rows(list(range(at, at + len(clip))))
 
     def _delete(self):
-        r = self._selected()
-        if r >= 0:
+        rows = self._selected_rows()
+        if not rows:
+            return
+        for r in reversed(rows):
             del self.steps[r]
-            if self.editing_row == r:
-                self._reset_editor()
-            self._refresh_list(min(r, len(self.steps) - 1))
+        self._reset_editor()
+        self._refresh_list()
+        if self.steps:
+            self._select_rows([min(rows[0], len(self.steps) - 1)])
 
     # ------------------------------------------------------------ 입력
     def _on_type(self, idx):

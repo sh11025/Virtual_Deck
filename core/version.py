@@ -4,5 +4,6 @@
 """
 
 APP_NAME = "Virtual Deck"
-APP_VERSION = "1.9.3"
+APP_VERSION = "1.9.4"
 APP_ID = "VirtualDeck"
+PROJECT_URL = "https://github.com/sh11025/Virtual_Deck"

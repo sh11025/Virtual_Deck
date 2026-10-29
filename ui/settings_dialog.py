@@ -244,14 +244,22 @@ class SettingsDialog(GlassDialog):
         self.resize(dialog_w, dialog_h)
 
     def reject(self):
-        if getattr(self, "_orig_font_size", None):
+        # 글자 크기나 글꼴을 미리 바꿔 봤을 때만 원래대로 되돌립니다.
+        # (바꾼 게 없는데도 전체 스타일을 다시 계산하면 취소가 오래 걸려요)
+        scale_changed = getattr(self.config, "font_size", "M") != self._orig_font_size
+        font_changed = getattr(self.config, "ui_font", "") != self._orig_ui_font
+        if scale_changed or font_changed:
             self.config.font_size = self._orig_font_size
-            theme.apply_ui_scale(self._orig_font_size)
-        if hasattr(self, "_orig_ui_font"):
             self.config.ui_font = self._orig_ui_font
             theme.set_ui_font(self._orig_ui_font)
-            theme.apply_ui_scale(getattr(self.config, "font_size", "M"))
+            theme.apply_ui_scale(self._orig_font_size)
         super().reject()
+
+    def _open_github(self):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from core.version import PROJECT_URL
+        QDesktopServices.openUrl(QUrl(PROJECT_URL))
 
     def _changed(self, *_):
         if self._loading:
@@ -599,6 +607,16 @@ class SettingsDialog(GlassDialog):
             b_inst.clicked.connect(self._install_pycaw)
             sound_row.addWidget(b_inst)
         left.addLayout(sound_row)
+
+        left.addWidget(section_label("프로그램 정보"))
+        from core.version import APP_NAME, APP_VERSION
+        about_row = QHBoxLayout()
+        about_row.addWidget(QLabel(f"{APP_NAME} v{APP_VERSION}"), 1)
+        b_git = GlassButton("깃허브 열기", icon_name="export")
+        b_git.clicked.connect(self._open_github)
+        about_row.addWidget(b_git)
+        left.addLayout(about_row)
+
         left.addStretch(1)
         cols.addLayout(left, 1)
 

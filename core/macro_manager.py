@@ -95,6 +95,29 @@ def parse_steps(macro_json: str) -> List[Dict[str, str]]:
     return []
 
 
+def step_label(step: Dict[str, Any]) -> str:
+    """진행 표시에 쓸 짧은 단계 이름 (버튼 위에 작게 보여줘요)"""
+    t, v = step.get("type", ""), str(step.get("value", "")).strip()
+    if t == "delay":
+        n, u = ms_to_unit(v)
+        return f"{n}{u} 기다리기"
+    if t == "wait_until":
+        return f"{v} 까지 기다리기"
+    if t == "volume_set":
+        return f"볼륨 {v}%"
+    if t == "shortcut":
+        return "단축키 " + v.replace(" + ", "+")
+    if t == "text":
+        return "글자 입력"
+    if t == "media":
+        return ShortcutManager.media_label(v).split(" ", 1)[-1].split("(", 1)[0].strip()
+    if t == "program":
+        return "프로그램 실행"
+    if t == "url":
+        return "웹사이트 열기"
+    return STEP_TYPES.get(t, t)
+
+
 class MacroRunner(QObject):
     """매크로 실행기 (프로그램 전체에서 하나만 사용)"""
 
@@ -112,6 +135,17 @@ class MacroRunner(QObject):
     def __init__(self):
         super().__init__()
         self._running: Dict[str, threading.Event] = {}
+        self._progress: Dict[str, Dict[str, Any]] = {}
+
+    def progress(self, key: str) -> Optional[Dict[str, Any]]:
+        """실행 중인 연속 동작의 진행 상황 (몇 번째 단계, 남은 시간, 다음 단계). 실행 중이 아니면 None"""
+        cur = self._progress.get(key)
+        if cur is None:
+            return None
+        out = dict(cur)
+        end = out.get("end")
+        out["remaining"] = None if end is None else max(0.0, end - time.monotonic())
+        return out
 
     def is_running(self, key: str) -> bool:
         return key in self._running
@@ -141,10 +175,14 @@ class MacroRunner(QObject):
     def _worker(self, key: str, steps: List[Dict[str, Any]], cancel: threading.Event) -> None:
         ok, msg = True, "매크로 완료"
         try:
-            for step in steps:
+            for idx, step in enumerate(steps):
                 if cancel.is_set():
                     ok, msg = False, "매크로를 멈췄어요"
                     break
+                self._progress[key] = {
+                    "index": idx, "total": len(steps), "label": step_label(step),
+                    "next": step_label(steps[idx + 1]) if idx + 1 < len(steps) else "", "end": None,
+                }
                 st, val = step.get("type", ""), str(step.get("value", "")).strip()
                 if st == "delay":
                     try:
@@ -152,6 +190,7 @@ class MacroRunner(QObject):
                     except ValueError:
                         total = 0.3
                     end = time.monotonic() + total
+                    self._progress[key]["end"] = end
                     while time.monotonic() < end and not cancel.is_set():
                         time.sleep(min(0.05, end - time.monotonic() + 0.001))
                     if cancel.is_set():   # 기다리는 도중에 멈춘 경우
@@ -163,6 +202,7 @@ class MacroRunner(QObject):
                     if wait_sec is None:
                         continue
                     end = time.monotonic() + wait_sec
+                    self._progress[key]["end"] = end
                     while time.monotonic() < end and not cancel.is_set():
                         time.sleep(min(0.2, max(0.01, end - time.monotonic())))
                     if cancel.is_set():
@@ -210,5 +250,6 @@ class MacroRunner(QObject):
             ok, msg = False, f"매크로 오류: {e}"
         finally:
             self._running.pop(key, None)
+            self._progress.pop(key, None)
             # 신호는 자동으로 화면 쪽 작업 줄로 안전하게 전달됩니다.
             self.finished.emit(key, ok, msg)

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import QWidget, QApplication
 
 from core import paths
 from core.action_executor import describe_action
+from core.timer_manager import format_seconds
 from models.button_model import DeckButtonData
 from ui import theme, icons
 from ui.theme import T, tint_colors
@@ -152,6 +153,7 @@ class DeckButtonWidget(QWidget):
         self._hold = self._make_anim(550)      # 길게 누르기 진행 고리
         self._hold.setEasingCurve(QEasingCurve.Linear)
         self._spin = 0.0
+        self._progress_fn = None
         self._spin_timer = QTimer(self)
         self._spin_timer.setInterval(16)
         self._spin_timer.timeout.connect(self._tick_spin)
@@ -246,6 +248,10 @@ class DeckButtonWidget(QWidget):
         self._fill_was_on = not now_on
         self._fill.stop()
         self._fill.start()
+
+    def set_progress_source(self, fn) -> None:
+        """연속 동작 진행 상황을 가져오는 함수를 연결 (실행 중에 버튼 위에 단계와 남은 시간을 보여줌)"""
+        self._progress_fn = fn
 
     def set_running(self, on: bool) -> None:
         self.running = on
@@ -502,7 +508,10 @@ class DeckButtonWidget(QWidget):
                 p.setPen(QPen(QColor(T().accent), 2.6, Qt.SolidLine, Qt.RoundCap))
                 p.drawArc(ring, int(-self._spin * 16), 100 * 16)
 
-            if (labels or wide) and d.name.strip():
+            prog = self._progress_fn() if (self.running and self._progress_fn) else None
+            if prog:
+                self._paint_macro_progress(p, rect, radius, prog)
+            elif (labels or wide) and d.name.strip():
                 font = theme.ui_font(fsize, QFont.Bold)
                 p.setFont(font)
                 fm = QFontMetrics(font)
@@ -539,6 +548,38 @@ class DeckButtonWidget(QWidget):
             p.setBrush(QColor("#ffffff") if (d.toggle_on and colors) else
                        (QColor(theme.TOGGLE_ON_COLOR) if d.toggle_on else with_alpha(fg, 0.25)))
             p.drawEllipse(corner, dot / 2, dot / 2)
+
+    def _paint_macro_progress(self, p, rect, radius, prog):
+        """연속 동작 실행 중: 몇 번째 단계인지, 남은 시간, 다음 단계를 아래쪽 띠에 보여줌"""
+        big = self.button_size >= 70
+        h = rect.height() * (0.34 if big else 0.26)
+        band = QRectF(rect.left() + 3, rect.bottom() - h - 3, rect.width() - 6, h)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(8, 12, 24, 165))
+        p.drawRoundedRect(band, max(6.0, radius * 0.5), max(6.0, radius * 0.5))
+        remaining = prog.get("remaining")
+        head = f"{prog['index'] + 1}/{prog['total']}"
+        line1 = f"{head} · {format_seconds(remaining)}" if remaining is not None else f"{head} {prog['label']}"
+        line2 = f"다음: {prog['next']}" if prog.get("next") else "마지막 단계"
+        fs = max(9.0, self.button_size * 0.115)
+        f1 = theme.ui_font(fs, QFont.Bold)
+        f2 = theme.ui_font(fs * 0.86, QFont.Medium)
+        inner = band.adjusted(5, 1, -5, -1)
+        if big:
+            top = QRectF(inner.left(), inner.top(), inner.width(), inner.height() * 0.52)
+            bot = QRectF(inner.left(), top.bottom(), inner.width(), inner.height() * 0.48)
+            p.setFont(f1)
+            p.setPen(QColor("#ffffff"))
+            p.drawText(top, Qt.AlignCenter, QFontMetrics(f1).elidedText(line1, Qt.ElideRight, int(top.width())))
+            p.setFont(f2)
+            p.setPen(QColor(255, 255, 255, 190))
+            p.drawText(bot, Qt.AlignCenter, QFontMetrics(f2).elidedText(line2, Qt.ElideRight, int(bot.width())))
+        else:
+            # 작은 버튼은 한 줄만: 남은 시간이 있으면 시간, 없으면 단계 번호
+            short = format_seconds(remaining) if remaining is not None else head
+            p.setFont(f1)
+            p.setPen(QColor("#ffffff"))
+            p.drawText(inner, Qt.AlignCenter, QFontMetrics(f1).elidedText(short, Qt.ElideRight, int(inner.width())))
 
     def _paint_info(self, p, rect, fg, halo, tinted):
         """정보 버튼: 1개면 큰 값+작은 설명+게이지, 2개 이상이면 칸을 나누어 작은 라벨+큰 값 표시"""
@@ -662,7 +703,7 @@ class DeckButtonWidget(QWidget):
 
     def _paint_timer(self, p, rect, radius, fg, halo, tinted):
         """타이머: 남은 시간 크게 + 상태 글자 + 테두리를 따라 줄어드는 고리"""
-        from core.timer_manager import parse_timer, format_seconds
+        from core.timer_manager import parse_timer
         d = self.button_data
         cfg = parse_timer(d.action_data)
         big, small, progress, state = self.timer_view or (
